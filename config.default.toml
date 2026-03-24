@@ -1,0 +1,24 @@
+[scroll]
+# frame rate for animation loop (Hz)
+frame_rate = 150
+# animation duration for one wheel event (ms)
+animation_time = 400
+# base wheel distance scale (SmoothScroll reference default: 100)
+step_size = 100.0
+# Michael Herf pulse easing
+pulse_algorithm = true
+pulse_scale = 4.0
+# false = normal Windows direction, true = natural direction
+inverted = false
+
+[acceleration]
+# continuous-scroll detection window (ms)
+delta_ms = 50
+# max acceleration factor (1.0 disables acceleration)
+max = 3.0
+
+[general]
+# run on user logon
+autostart = false
+# master switch
+enabled = true

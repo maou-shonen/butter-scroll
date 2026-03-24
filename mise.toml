@@ -1,0 +1,27 @@
+[tools]
+rust = "1.94.0"
+zig = "0.15.2"
+
+[tasks]
+# 開發常用指令
+run = "cargo run"
+test = "cargo test"
+check = "cargo check"
+fmt = "cargo fmt"
+clippy = "cargo clippy"
+
+# 建置
+build = "cargo build --release"
+build-dev = "cargo build"
+
+# Windows 交叉編譯（從 Linux 直接產出 .exe）
+build-windows = { run = "cargo build --release --target x86_64-pc-windows-gnu", description = "Cross-compile Windows executable on Linux" }
+
+# 檢查 Windows target（不產出 binary，只驗證語法）
+check-windows = { run = "cargo check --target x86_64-pc-windows-gnu", description = "Check code compiles for Windows target" }
+
+# 清理
+clean = "cargo clean"
+
+# 完整驗證（測試 + 檢查 Windows target）
+verify = { depends = ["test", "check-windows"], description = "Run tests and verify Windows target" }
