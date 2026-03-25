@@ -142,6 +142,7 @@ impl AppThresholdCache {
                 _ => None,
             })
             .collect();
+        let count = entries.len();
 
         let json =
             serde_json::to_string_pretty(&entries).map_err(|e| format!("serialize error: {e}"))?;
@@ -149,6 +150,7 @@ impl AppThresholdCache {
         let tmp = path.with_extension("tmp");
         std::fs::write(&tmp, json).map_err(|e| format!("write error: {e}"))?;
         std::fs::rename(&tmp, path).map_err(|e| format!("rename error: {e}"))?;
+        eprintln!("[threshold] cache saved: {} entries", count);
 
         Ok(())
     }
@@ -161,12 +163,18 @@ impl AppThresholdCache {
 
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
-            Err(_) => return cache,
+            Err(_) => {
+                eprintln!("[threshold] cache loaded: 0 entries");
+                return cache;
+            }
         };
 
         let entries: Vec<CacheEntry> = match serde_json::from_str(&content) {
             Ok(v) => v,
-            Err(_) => return cache,
+            Err(_) => {
+                eprintln!("[threshold] cache loaded: 0 entries");
+                return cache;
+            }
         };
 
         for entry in entries {
@@ -183,6 +191,7 @@ impl AppThresholdCache {
             cache.modes.insert(key, entry.mode);
         }
 
+        eprintln!("[threshold] cache loaded: {} entries", cache.modes.len());
         cache
     }
 }
