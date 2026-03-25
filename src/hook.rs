@@ -5,9 +5,6 @@ use crossbeam_channel::Sender;
 use std::sync::OnceLock;
 
 #[cfg(target_os = "windows")]
-use crate::injector::INJECT_MAGIC;
-
-#[cfg(target_os = "windows")]
 use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
@@ -53,15 +50,25 @@ impl Drop for MouseHook {
 
 #[cfg(target_os = "windows")]
 extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // Bit 0 of MSLLHOOKSTRUCT.flags — set by the OS for any event
+    // produced via SendInput / mouse_event.  This is the reliable way
+    // to detect injected input; dwExtraInfo propagation is not
+    // guaranteed across all Windows versions and configurations.
+    const LLMHF_INJECTED: u32 = 0x01;
+
     if code == HC_ACTION as i32 {
         let msg = wparam as u32;
         if msg == WM_MOUSEWHEEL || msg == WM_MOUSEHWHEEL {
             // SAFETY: for HC_ACTION + wheel events, lparam points to MSLLHOOKSTRUCT.
             let info = unsafe { &*(lparam as *const MSLLHOOKSTRUCT) };
 
-            // Ignore events we generated ourselves.
-            if info.dwExtraInfo == INJECT_MAGIC {
-                eprintln!("[hook] pass-through own event (INJECT_MAGIC)");
+            // Pass through any injected event (ours or other programs').
+            // Only intercept genuine hardware wheel input.
+            if info.flags & LLMHF_INJECTED != 0 {
+                eprintln!(
+                    "[hook] pass-through injected event (flags=0x{:X})",
+                    info.flags
+                );
                 // SAFETY: pass-through to next hook.
                 return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) };
             }
