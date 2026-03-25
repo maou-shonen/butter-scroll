@@ -19,6 +19,10 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # Remove custom linker config for Linux CI (uses system linker)
+      - name: Setup cargo config
+        run: rm -f .cargo/config.toml
+
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
