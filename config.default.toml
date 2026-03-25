@@ -1,26 +1,24 @@
 [scroll]
-# frame rate for animation loop (Hz)
 frame_rate = 150
-# animation duration for one wheel event (ms)
 animation_time = 400
-# scroll distance multiplier (1.0 = 1:1 mapping, 3.0 = recommended default)
-# Higher values feel smoother because more wheel events are spread over
-# the animation period.  1.0 is technically correct but has high latency.
-step_size = 3.0
-# Michael Herf pulse easing
+step_size = 100.0
 pulse_algorithm = true
 pulse_scale = 4.0
-# false = normal Windows direction, true = natural direction
+pulse_normalize = 1.0
 inverted = false
 
 [acceleration]
-# continuous-scroll detection window (ms)
 delta_ms = 50
-# max acceleration factor (1.0 disables acceleration)
 max = 3.0
 
+[output]
+# Minimum accumulated delta before injecting a wheel event.
+# Lower = smoother scrolling, higher = more compatible with legacy apps.
+# 120 = WHEEL_DELTA (chunkiest, universal compatibility)
+# 40 = WHEEL_DELTA/3 (recommended balance)
+# 1 = per-frame injection (smoothest, modern apps only)
+inject_threshold = 40.0
+
 [general]
-# run on user logon
 autostart = false
-# master switch
 enabled = true

@@ -16,13 +16,13 @@ pub struct Pulse {
 }
 
 impl Pulse {
-    /// Create a new pulse with the given `scale` (default: 4.0).
-    pub fn new(scale: f64) -> Self {
+    /// Create a new pulse with the given `scale` and normalization hint.
+    pub fn new(scale: f64, normalize_hint: f64) -> Self {
         // Compute normalization so that pulse(1.0) = 1.0.
-        let raw_one = Self::raw(1.0, scale, 1.0);
+        let raw_one = Self::raw(1.0, scale, normalize_hint);
         Self {
             scale,
-            normalize: 1.0 / raw_one,
+            normalize: normalize_hint / raw_one,
         }
     }
 
@@ -63,7 +63,7 @@ mod tests {
     use super::*;
 
     fn default_pulse() -> Pulse {
-        Pulse::new(4.0)
+        Pulse::new(4.0, 1.0)
     }
 
     #[test]
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn different_scales() {
         for &scale in &[1.0, 2.0, 4.0, 8.0] {
-            let p = Pulse::new(scale);
+            let p = Pulse::new(scale, 1.0);
             assert_eq!(p.apply(0.0), 0.0, "scale={scale}");
             assert!((p.apply(1.0) - 1.0).abs() < 1e-12, "scale={scale}");
         }
