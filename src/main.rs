@@ -1,6 +1,8 @@
 mod app;
 mod autostart;
 mod config;
+mod detector;
+mod detector_win;
 mod engine;
 mod hook;
 mod injector;
