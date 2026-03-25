@@ -1,24 +1,79 @@
+# butter-scroll configuration
+# Algorithm based on gblazex/smoothscroll (SmoothScroll Chrome extension)
+# Delete this file to regenerate defaults on next launch.
+
 [scroll]
+
+# Animation frame rate (Hz). Higher = smoother animation but more CPU.
+# Range: 30–1000
 frame_rate = 150
+
+# Duration of one scroll animation (ms).
+# Longer = more gradual deceleration, shorter = snappier response.
+# Range: 1–5000
 animation_time = 400
+
+# Scroll distance per wheel notch (in abstract scroll units).
+# Matched from the original smoothscroll extension where 100 ≈ 100 px.
+# On Windows this maps to wheel delta via: delta × step_size / 120.
+# 100 ≈ default scroll distance (3 lines with default Windows settings).
+# 200 = 2× faster, 50 = slower/more precise.
+# Range: 1–2000
 step_size = 100.0
+
+# Use the pulse (Michael Herf) easing curve instead of linear
+# interpolation. Produces an ease-out feel: fast start, gradual stop.
 pulse_algorithm = true
+
+# Pulse curve intensity. Higher values front-load more of the scroll
+# into the early phase of the animation.
+# Range: 0.1–20
 pulse_scale = 4.0
+
+# Pulse normalization factor. Leave at 1.0 for auto-normalization
+# (ensures pulse(1.0) = 1.0). Advanced: values > 1 amplify the curve.
+# Range: 0.1–10
 pulse_normalize = 1.0
+
+# Invert scroll direction ("natural" / macOS-style scrolling).
 inverted = false
 
 [acceleration]
+
+# Time window (ms) for detecting rapid consecutive scrolls.
+# Scrolls arriving within this window receive an acceleration boost.
+# Range: 1–500
 delta_ms = 50
+
+# Maximum acceleration multiplier for rapid scrolling.
+# 1.0 = no acceleration. 3.0 = up to 3× speed when scrolling fast.
+# Range: 1–20
 max = 3.0
 
 [output]
-# Minimum accumulated delta before injecting a wheel event.
-# Lower = smoother scrolling, higher = more compatible with legacy apps.
-# 120 = WHEEL_DELTA (chunkiest, universal compatibility)
-# 40 = WHEEL_DELTA/3 (recommended balance)
-# 1 = per-frame injection (smoothest, modern apps only)
+
+# Minimum accumulated scroll delta before injecting a wheel event.
+# Controls the trade-off between smoothness and app compatibility.
+#
+# How it works: the animation produces small deltas each frame.
+# Instead of injecting every tiny delta (which some apps ignore),
+# butter-scroll accumulates until this threshold is reached, then
+# injects the full accumulated amount as a single wheel event.
+#
+#   120 = WHEEL_DELTA (most compatible, but visibly chunky — 
+#         only ~1 injection per notch with step_size=100)
+#    40 = WHEEL_DELTA/3 (recommended — smooth for most apps,
+#         ~2–3 injections per notch)
+#     1 = inject every frame (smoothest possible, but some legacy
+#         Win32 apps may ignore sub-WHEEL_DELTA values)
+#
+# Range: 1–120
 inject_threshold = 40.0
 
 [general]
+
+# Start butter-scroll automatically on Windows login.
 autostart = false
+
+# Master switch. When false, wheel events pass through unmodified.
 enabled = true
