@@ -70,6 +70,13 @@ max = 3.0
 # Range: 1–120
 inject_threshold = 40.0
 
+# Optional per-app overrides for legacy or modern apps.
+# Keys are executable paths; values use the same 1–120 range.
+#
+# [output.app_overrides]
+# "C:\\Windows\\System32\\notepad.exe" = 120.0
+# "C:\\Program Files\\App\\modern.exe" = 1.0
+
 [general]
 
 # Start butter-scroll automatically on Windows login.

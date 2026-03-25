@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -57,6 +58,9 @@ pub struct OutputConfig {
     /// 40 = WHEEL_DELTA/3 (good balance, default)
     /// 1 = per-frame (smoothest, modern apps only)
     pub inject_threshold: f64,
+    /// Per-app threshold overrides keyed by executable path.
+    #[serde(default)]
+    pub app_overrides: HashMap<String, f64>,
 }
 
 /// General application settings.
@@ -186,6 +190,13 @@ impl Config {
         }
         self.output.inject_threshold = self.output.inject_threshold.clamp(1.0, 120.0);
 
+        for value in self.output.app_overrides.values_mut() {
+            if !value.is_finite() {
+                *value = 1.0;
+            }
+            *value = value.clamp(1.0, 120.0);
+        }
+
         // Keyboard config: nothing numeric to clamp, but ensure mode
         // inheritance is consistent — a group set to `None` is valid
         // (inherits parent), so no fixup needed.
@@ -219,6 +230,7 @@ impl Default for OutputConfig {
     fn default() -> Self {
         Self {
             inject_threshold: 40.0,
+            app_overrides: HashMap::new(),
         }
     }
 }
@@ -360,6 +372,7 @@ step_size = 2.5
             },
             output: OutputConfig {
                 inject_threshold: f64::NEG_INFINITY,
+                app_overrides: HashMap::new(),
             },
             general: GeneralConfig::default(),
             keyboard: KeyboardConfig::default(),
@@ -392,6 +405,56 @@ step_size = 2.5
         assert_eq!(cfg.scroll.pulse_scale, 0.1);
         assert_eq!(cfg.scroll.pulse_normalize, 10.0);
         assert_eq!(cfg.output.inject_threshold, 120.0);
+    }
+
+    #[test]
+    fn config_parses_app_overrides() {
+        let text = r#"
+[output]
+inject_threshold = 40.0
+
+[output.app_overrides]
+"C:\\Windows\\System32\\notepad.exe" = 120.0
+"C:\\Program Files\\App\\modern.exe" = 1.0
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+
+        assert_eq!(cfg.output.app_overrides.len(), 2);
+        assert_eq!(
+            cfg.output
+                .app_overrides
+                .get("C:\\Windows\\System32\\notepad.exe")
+                .copied(),
+            Some(120.0)
+        );
+        assert_eq!(
+            cfg.output
+                .app_overrides
+                .get("C:\\Program Files\\App\\modern.exe")
+                .copied(),
+            Some(1.0)
+        );
+    }
+
+    #[test]
+    fn config_default_has_empty_overrides() {
+        assert!(OutputConfig::default().app_overrides.is_empty());
+    }
+
+    #[test]
+    fn config_sanitizes_override_values() {
+        let mut cfg = Config::default();
+        cfg.output
+            .app_overrides
+            .insert("high.exe".to_string(), 500.0);
+        cfg.output
+            .app_overrides
+            .insert("low.exe".to_string(), -10.0);
+
+        cfg.sanitize();
+
+        assert_eq!(cfg.output.app_overrides.get("high.exe").copied(), Some(120.0));
+        assert_eq!(cfg.output.app_overrides.get("low.exe").copied(), Some(1.0));
     }
 
     // -- Keyboard config tests ----------------------------------------------
