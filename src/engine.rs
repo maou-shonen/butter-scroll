@@ -21,6 +21,9 @@ struct ScrollItem {
 // Scroll engine — pure algorithm, zero platform dependencies
 // ---------------------------------------------------------------------------
 
+/// Windows WHEEL_DELTA constant — the minimum meaningful wheel event unit.
+const WHEEL_DELTA: f64 = 120.0;
+
 pub struct ScrollEngine {
     // DI dependencies
     time: Arc<dyn TimeSource>,
@@ -35,6 +38,13 @@ pub struct ScrollEngine {
     queue: Vec<ScrollItem>,
     direction: (i8, i8),
     last_scroll_time: u64,
+
+    // Accumulator — collects fractional animation output and only injects
+    // when the accumulated amount reaches ±WHEEL_DELTA (120).  This is
+    // necessary because Windows apps expect wheel events in multiples of
+    // WHEEL_DELTA; sub-threshold values are silently ignored by most apps.
+    pending_x: f64,
+    pending_y: f64,
 }
 
 impl ScrollEngine {
@@ -54,6 +64,8 @@ impl ScrollEngine {
             queue: Vec::with_capacity(32),
             direction: (0, 0),
             last_scroll_time: 0,
+            pending_x: 0.0,
+            pending_y: 0.0,
         }
     }
 
@@ -82,11 +94,12 @@ impl ScrollEngine {
                 }
             }
 
-            // Tick all active animations and inject the aggregate delta.
+            // Tick all active animations, accumulate output, and inject
+            // WHEEL_DELTA-sized chunks when the threshold is reached.
             let (dx, dy) = self.tick();
-            if dx != 0 || dy != 0 {
-                self.output.inject_wheel(dx, dy);
-            }
+            self.pending_x += dx;
+            self.pending_y += dy;
+            self.flush_pending();
 
             // Frame pacing — sleep for the remainder of the frame budget.
             let budget =
@@ -118,7 +131,10 @@ impl ScrollEngine {
         } else {
             1.0
         };
-        let scaled = delta as f64 * self.config.scroll.step_size / 120.0 * sign;
+        // step_size is a multiplier on the original wheel delta.
+        // 1.0 = one WHEEL_DELTA per notch (1:1 mapping).
+        // 3.0 = three WHEEL_DELTA injections per notch (faster scroll).
+        let scaled = delta as f64 * self.config.scroll.step_size * sign;
 
         let (dx, dy) = if horizontal {
             (scaled, 0.0)
@@ -139,21 +155,23 @@ impl ScrollEngine {
         self.queue.push(ScrollItem {
             x,
             y,
-            last_x: if x < 0.0 { 0.99 } else { -0.99 },
-            last_y: if y < 0.0 { 0.99 } else { -0.99 },
+            last_x: 0.0,
+            last_y: 0.0,
             start: now,
         });
     }
 
     /// Tick all queued animations and return the aggregate delta for this
-    /// frame (port of the JS `step` callback inside `scrollArray`).
-    pub(crate) fn tick(&mut self) -> (i32, i32) {
+    /// frame as exact floating-point values.  The caller (run loop)
+    /// accumulates these into `pending_x/pending_y` and injects
+    /// WHEEL_DELTA-sized chunks via `flush_pending()`.
+    pub(crate) fn tick(&mut self) -> (f64, f64) {
         let now = self.time.now_ms();
         let anim_time = self.config.scroll.animation_time as u64;
         let use_pulse = self.config.scroll.pulse_algorithm;
 
-        let mut scroll_x: i32 = 0;
-        let mut scroll_y: i32 = 0;
+        let mut scroll_x: f64 = 0.0;
+        let mut scroll_y: f64 = 0.0;
 
         self.queue.retain_mut(|item| {
             let elapsed = now.saturating_sub(item.start);
@@ -171,20 +189,48 @@ impl ScrollEngine {
                 position
             };
 
-            // Incremental delta — truncate to integer (matches JS `>> 0`).
-            let x = (item.x * position - item.last_x) as i32;
-            let y = (item.y * position - item.last_y) as i32;
+            let x = item.x * position - item.last_x;
+            let y = item.y * position - item.last_y;
 
             scroll_x += x;
             scroll_y += y;
 
-            item.last_x += x as f64;
-            item.last_y += y as f64;
+            item.last_x += x;
+            item.last_y += y;
 
             !finished
         });
 
         (scroll_x, scroll_y)
+    }
+
+    /// Drain the accumulator in ±WHEEL_DELTA (120) chunks.  Each chunk
+    /// becomes a single `SendInput(MOUSEEVENTF_WHEEL)` call whose delta
+    /// is exactly ±120 — a value every Windows application handles.
+    ///
+    /// An epsilon tolerance (1e-9) prevents floating-point rounding from
+    /// leaving the accumulator stuck at values like 119.9999999997.
+    pub(crate) fn flush_pending(&mut self) {
+        const EPS: f64 = 1e-9;
+
+        while self.pending_y.abs() + EPS >= WHEEL_DELTA {
+            let sign = if self.pending_y > 0.0 { 1 } else { -1 };
+            self.output.inject_wheel(0, sign * WHEEL_DELTA as i32);
+            self.pending_y -= sign as f64 * WHEEL_DELTA;
+        }
+        // Zero out negligible residuals left by float arithmetic.
+        if self.pending_y.abs() < EPS {
+            self.pending_y = 0.0;
+        }
+
+        while self.pending_x.abs() + EPS >= WHEEL_DELTA {
+            let sign = if self.pending_x > 0.0 { 1 } else { -1 };
+            self.output.inject_wheel(sign * WHEEL_DELTA as i32, 0);
+            self.pending_x -= sign as f64 * WHEEL_DELTA;
+        }
+        if self.pending_x.abs() < EPS {
+            self.pending_x = 0.0;
+        }
     }
 
     // -- private helpers ----------------------------------------------------
@@ -213,6 +259,8 @@ impl ScrollEngine {
         if changed {
             self.direction = (dx, dy);
             self.queue.clear();
+            self.pending_x = 0.0;
+            self.pending_y = 0.0;
             self.last_scroll_time = 0;
         }
     }
@@ -257,6 +305,8 @@ impl ScrollEngine {
     fn apply_config(&mut self, config: Config) {
         // Reload semantics: do not mix old queue items with new pulse/timing.
         self.queue.clear();
+        self.pending_x = 0.0;
+        self.pending_y = 0.0;
         self.last_scroll_time = 0;
         self.direction = (0, 0);
         self.pulse = Pulse::new(config.scroll.pulse_scale);
@@ -282,6 +332,10 @@ impl ScrollEngine {
                 self.config.general.enabled = on;
                 if !on {
                     self.queue.clear();
+                    self.pending_x = 0.0;
+                    self.pending_y = 0.0;
+                    self.direction = (0, 0);
+                    self.last_scroll_time = 0;
                 }
             }
             EngineCommand::Reload(cfg) => {
@@ -323,21 +377,21 @@ mod tests {
         engine.handle_scroll(-120, false);
 
         // Walk through the full animation.
-        let mut total_dy: i64 = 0;
+        let mut total_dy: f64 = 0.0;
         let step = 1000 / engine.config.scroll.frame_rate as u64; // ~6-7 ms
         let mut t = 0u64;
         while t <= anim_time + step {
             time.set(t);
             let (_dx, dy) = engine.tick();
-            total_dy += dy as i64;
+            total_dy += dy;
             t += step;
         }
 
-        // Total should be approximately -step_size (-100).
-        let expected = -engine.config.scroll.step_size;
+        // Total should be approximately delta * step_size = -120 * 1.0 = -120.
+        let expected = -120.0 * engine.config.scroll.step_size;
         assert!(
-            (total_dy as f64 - expected).abs() < 2.0,
-            "total_dy={total_dy}, expected ~{expected}"
+            (total_dy - expected).abs() < 1.0,
+            "total_dy={total_dy:.2}, expected ~{expected}"
         );
     }
 
@@ -425,20 +479,20 @@ mod tests {
         assert_eq!(engine.queue.len(), 2, "both items should be in queue");
 
         // Walk through full animation.
-        let mut total_dy: i64 = 0;
+        let mut total_dy: f64 = 0.0;
         let step = 7u64;
         let mut t = 0u64;
         while t <= anim_time + step + 20 {
             time.set(t);
             let (_, dy) = engine.tick();
-            total_dy += dy as i64;
+            total_dy += dy;
             t += step;
         }
 
         // Total should be roughly the sum of both (accounting for acceleration).
         assert!(
-            total_dy.abs() >= 180, // at least ~200 minus rounding
-            "accumulated total_dy={total_dy}"
+            total_dy.abs() >= 180.0, // at least ~200 minus rounding
+            "accumulated total_dy={total_dy:.2}"
         );
     }
 
@@ -484,11 +538,19 @@ mod tests {
         engine.on_scroll(0.0, -100.0);
         assert_eq!(engine.queue.len(), 1);
 
+        // Simulate partial animation to build up some pending.
+        time.set(50);
+        let (_, dy) = engine.tick();
+        engine.pending_y += dy;
+        assert!(engine.pending_y.abs() > 0.0);
+
         let mut new_cfg = engine.config.clone();
         new_cfg.scroll.pulse_scale = 8.0;
         engine.apply_config(new_cfg);
 
         assert!(engine.queue.is_empty());
+        assert_eq!(engine.pending_x, 0.0);
+        assert_eq!(engine.pending_y, 0.0);
         assert_eq!(engine.last_scroll_time, 0);
         assert_eq!(engine.direction, (0, 0));
     }
@@ -500,7 +562,150 @@ mod tests {
         engine.on_scroll(0.0, -100.0);
         assert_eq!(engine.queue.len(), 1);
 
+        // Build up some pending.
+        time.set(50);
+        let (_, dy) = engine.tick();
+        engine.pending_y += dy;
+
         assert!(engine.handle_command(EngineCommand::SetEnabled(false)));
         assert!(engine.queue.is_empty());
+        assert_eq!(engine.pending_x, 0.0);
+        assert_eq!(engine.pending_y, 0.0);
+    }
+
+    // -- Accumulator / flush_pending tests ----------------------------------
+
+    #[test]
+    fn flush_injects_wheel_delta_chunks() {
+        let (mut engine, time, output) = test_engine();
+        let anim_time = engine.config.scroll.animation_time as u64;
+
+        // One wheel-down notch with default step_size=1.0.
+        // Total animation output ≈ -120 → exactly one WHEEL_DELTA injection.
+        time.set(0);
+        engine.handle_scroll(-120, false);
+
+        let step = 1000 / engine.config.scroll.frame_rate as u64;
+        let mut t = 0u64;
+        while t <= anim_time + step {
+            time.set(t);
+            let (dx, dy) = engine.tick();
+            engine.pending_x += dx;
+            engine.pending_y += dy;
+            engine.flush_pending();
+            t += step;
+        }
+
+        let events = output.drain();
+        assert_eq!(events.len(), 1, "expected 1 WHEEL_DELTA injection");
+        assert_eq!(events[0], (0, -120));
+    }
+
+    #[test]
+    fn flush_multiple_chunks_for_large_step_size() {
+        let (mut engine, time, output) = test_engine();
+        engine.config.scroll.step_size = 3.0;
+        let anim_time = engine.config.scroll.animation_time as u64;
+
+        // step_size=3.0: total ≈ -360 → 3 injections of -120.
+        time.set(0);
+        engine.handle_scroll(-120, false);
+
+        let step = 1000 / engine.config.scroll.frame_rate as u64;
+        let mut t = 0u64;
+        while t <= anim_time + step {
+            time.set(t);
+            let (dx, dy) = engine.tick();
+            engine.pending_x += dx;
+            engine.pending_y += dy;
+            engine.flush_pending();
+            t += step;
+        }
+
+        let events = output.drain();
+        assert_eq!(events.len(), 3, "expected 3 WHEEL_DELTA injections");
+        for &(dx, dy) in &events {
+            assert_eq!((dx, dy), (0, -120));
+        }
+    }
+
+    #[test]
+    fn flush_remainder_carries_over() {
+        let (mut engine, _time, output) = test_engine();
+
+        // Manually set pending below threshold — no injection.
+        engine.pending_y = -100.0;
+        engine.flush_pending();
+        assert!(output.drain().is_empty(), "should not inject below WHEEL_DELTA");
+        assert!(
+            (engine.pending_y - (-100.0)).abs() < f64::EPSILON,
+            "remainder should be preserved"
+        );
+
+        // Push over threshold — one injection, remainder kept.
+        engine.pending_y -= 30.0; // now -130
+        engine.flush_pending();
+        let events = output.drain();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0], (0, -120));
+        assert!(
+            (engine.pending_y - (-10.0)).abs() < 0.01,
+            "remainder after injection: {}",
+            engine.pending_y
+        );
+    }
+
+    #[test]
+    fn direction_change_clears_pending() {
+        let (mut engine, time, _output) = test_engine();
+
+        time.set(0);
+        engine.on_scroll(0.0, -100.0);
+        engine.pending_y = -80.0; // simulate partial accumulation
+
+        time.set(10);
+        engine.on_scroll(0.0, 100.0); // reverse direction
+
+        assert_eq!(engine.pending_y, 0.0, "pending should be cleared on direction change");
+    }
+
+    #[test]
+    fn disable_resets_all_state() {
+        let (mut engine, time, _output) = test_engine();
+
+        // Build up state: queue, pending, direction, acceleration timestamp.
+        time.set(100);
+        engine.on_scroll(0.0, -120.0);
+        time.set(130);
+        engine.on_scroll(0.0, -120.0); // sets last_scroll_time, direction
+        engine.pending_y = -80.0;
+
+        assert!(!engine.queue.is_empty());
+        assert_ne!(engine.direction, (0, 0));
+        assert_ne!(engine.last_scroll_time, 0);
+
+        // Disable should reset everything, just like apply_config.
+        engine.handle_command(EngineCommand::SetEnabled(false));
+
+        assert!(engine.queue.is_empty());
+        assert_eq!(engine.pending_x, 0.0);
+        assert_eq!(engine.pending_y, 0.0);
+        assert_eq!(engine.direction, (0, 0));
+        assert_eq!(engine.last_scroll_time, 0);
+    }
+
+    #[test]
+    fn flush_handles_float_epsilon() {
+        let (mut engine, _time, output) = test_engine();
+
+        // Simulate float rounding: 119.9999999997 should still flush.
+        engine.pending_y = -119.9999999997;
+        engine.flush_pending();
+
+        let events = output.drain();
+        assert_eq!(events.len(), 1, "epsilon-close value should flush");
+        assert_eq!(events[0], (0, -120));
+        // Residual should be zeroed out (below epsilon).
+        assert_eq!(engine.pending_y, 0.0, "residual should be zeroed");
     }
 }

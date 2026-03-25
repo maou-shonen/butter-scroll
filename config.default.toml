@@ -3,8 +3,8 @@
 frame_rate = 150
 # animation duration for one wheel event (ms)
 animation_time = 400
-# base wheel distance scale (SmoothScroll reference default: 100)
-step_size = 100.0
+# scroll distance multiplier (1.0 = faithful 1:1 mapping, 2.0 = 2x speed)
+step_size = 1.0
 # Michael Herf pulse easing
 pulse_algorithm = true
 pulse_scale = 4.0

@@ -23,7 +23,11 @@ pub struct ScrollConfig {
     pub frame_rate: u32,
     /// Duration of one scroll animation in ms (default: 400)
     pub animation_time: u32,
-    /// Base scroll step size — controls scroll distance per notch (default: 100)
+    /// Scroll distance multiplier on the original wheel delta (default: 1.0).
+    /// 1.0 = one WHEEL_DELTA (120) per notch — faithful 1:1 mapping.
+    /// 2.0 = two WHEEL_DELTA per notch — 2× scroll speed.
+    /// Values below 1.0 will cause some wheel notches to produce no visible
+    /// scroll (the remainder carries over to the next event).
     pub step_size: f64,
     /// Enable pulse easing algorithm (default: true)
     pub pulse_algorithm: bool,
@@ -69,11 +73,18 @@ impl Config {
         // Avoid zero/negative animation time.
         self.scroll.animation_time = self.scroll.animation_time.clamp(1, 5_000);
 
-        // Step size should stay finite and positive.
+        // Step size (multiplier) should stay finite and positive.
         if !self.scroll.step_size.is_finite() || self.scroll.step_size <= 0.0 {
             self.scroll.step_size = ScrollConfig::default().step_size;
         }
-        self.scroll.step_size = self.scroll.step_size.clamp(1.0, 2_000.0);
+        // Legacy migration: versions before 0.2 used step_size as an
+        // absolute pixel count (default 100).  Values above the new max
+        // are almost certainly legacy configs — convert by dividing by 100
+        // so that the old default 100 maps to the new default 1.0.
+        if self.scroll.step_size > 20.0 {
+            self.scroll.step_size /= 100.0;
+        }
+        self.scroll.step_size = self.scroll.step_size.clamp(0.1, 20.0);
 
         // Pulse scale must be finite and > 0.
         if !self.scroll.pulse_scale.is_finite() || self.scroll.pulse_scale <= 0.0 {
@@ -95,7 +106,7 @@ impl Default for ScrollConfig {
         Self {
             frame_rate: 150,
             animation_time: 400,
-            step_size: 100.0,
+            step_size: 1.0,
             pulse_algorithm: true,
             pulse_scale: 4.0,
             inverted: false,
@@ -193,11 +204,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_smoothscroll() {
+    fn defaults() {
         let cfg = Config::default();
         assert_eq!(cfg.scroll.frame_rate, 150);
         assert_eq!(cfg.scroll.animation_time, 400);
-        assert!((cfg.scroll.step_size - 100.0).abs() < f64::EPSILON);
+        assert!((cfg.scroll.step_size - 1.0).abs() < f64::EPSILON);
         assert!(cfg.scroll.pulse_algorithm);
         assert!((cfg.scroll.pulse_scale - 4.0).abs() < f64::EPSILON);
         assert!(!cfg.scroll.inverted);
@@ -220,10 +231,10 @@ mod tests {
     fn partial_toml_fills_defaults() {
         let text = r#"
 [scroll]
-step_size = 200.0
+step_size = 2.5
 "#;
         let cfg: Config = toml::from_str(text).unwrap();
-        assert!((cfg.scroll.step_size - 200.0).abs() < f64::EPSILON);
+        assert!((cfg.scroll.step_size - 2.5).abs() < f64::EPSILON);
         // Other fields should be defaults
         assert_eq!(cfg.scroll.frame_rate, 150);
         assert_eq!(cfg.scroll.animation_time, 400);
@@ -251,9 +262,38 @@ step_size = 200.0
 
         assert_eq!(cfg.scroll.frame_rate, 30);
         assert_eq!(cfg.scroll.animation_time, 1);
-        assert_eq!(cfg.scroll.step_size, 100.0);
+        assert_eq!(cfg.scroll.step_size, 1.0);
         assert_eq!(cfg.scroll.pulse_scale, 4.0);
         assert_eq!(cfg.acceleration.delta_ms, 1);
         assert_eq!(cfg.acceleration.max, 1.0);
+    }
+
+    #[test]
+    fn sanitize_migrates_legacy_step_size() {
+        // Old default was 100.0 (absolute pixel count).  After migration
+        // it should become 1.0 (the new multiplier default).
+        let mut cfg = Config::default();
+        cfg.scroll.step_size = 100.0;
+        cfg.sanitize();
+        assert!(
+            (cfg.scroll.step_size - 1.0).abs() < f64::EPSILON,
+            "legacy 100.0 should migrate to 1.0"
+        );
+
+        // Old value 200.0 → 2.0 (2× speed).
+        cfg.scroll.step_size = 200.0;
+        cfg.sanitize();
+        assert!(
+            (cfg.scroll.step_size - 2.0).abs() < f64::EPSILON,
+            "legacy 200.0 should migrate to 2.0"
+        );
+
+        // Values within the new valid range should NOT be migrated.
+        cfg.scroll.step_size = 3.0;
+        cfg.sanitize();
+        assert!(
+            (cfg.scroll.step_size - 3.0).abs() < f64::EPSILON,
+            "3.0 is valid in new range, should not change"
+        );
     }
 }
