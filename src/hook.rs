@@ -61,18 +61,26 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
 
             // Ignore events we generated ourselves.
             if info.dwExtraInfo == INJECT_MAGIC {
+                eprintln!("[hook] pass-through own event (INJECT_MAGIC)");
                 // SAFETY: pass-through to next hook.
                 return unsafe { CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam) };
             }
 
             let delta = ((info.mouseData >> 16) as u16) as i16;
             let horizontal = msg == WM_MOUSEHWHEEL;
+            eprintln!(
+                "[hook] wheel event: delta={delta}, horizontal={horizontal}, mouseData=0x{:08X}",
+                info.mouseData
+            );
             if let Some(tx) = ENGINE_TX.get() {
                 if tx.send(EngineCommand::Scroll { delta, horizontal }).is_ok() {
                     // Swallow original event only when enqueue succeeds; smoothed
                     // events will be re-injected by the engine.
                     return 1;
                 }
+                eprintln!("[hook] WARNING: channel send failed, passing through");
+            } else {
+                eprintln!("[hook] WARNING: ENGINE_TX not set, passing through");
             }
         }
     }

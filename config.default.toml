@@ -3,8 +3,10 @@
 frame_rate = 150
 # animation duration for one wheel event (ms)
 animation_time = 400
-# scroll distance multiplier (1.0 = faithful 1:1 mapping, 2.0 = 2x speed)
-step_size = 1.0
+# scroll distance multiplier (1.0 = 1:1 mapping, 3.0 = recommended default)
+# Higher values feel smoother because more wheel events are spread over
+# the animation period.  1.0 is technically correct but has high latency.
+step_size = 3.0
 # Michael Herf pulse easing
 pulse_algorithm = true
 pulse_scale = 4.0

@@ -135,6 +135,10 @@ impl ScrollEngine {
         // 1.0 = one WHEEL_DELTA per notch (1:1 mapping).
         // 3.0 = three WHEEL_DELTA injections per notch (faster scroll).
         let scaled = delta as f64 * self.config.scroll.step_size * sign;
+        eprintln!(
+            "[engine] handle_scroll: delta={delta}, step_size={}, scaled={scaled:.1}",
+            self.config.scroll.step_size
+        );
 
         let (dx, dy) = if horizontal {
             (scaled, 0.0)
@@ -215,7 +219,12 @@ impl ScrollEngine {
 
         while self.pending_y.abs() + EPS >= WHEEL_DELTA {
             let sign = if self.pending_y > 0.0 { 1 } else { -1 };
-            self.output.inject_wheel(0, sign * WHEEL_DELTA as i32);
+            let inject = sign * WHEEL_DELTA as i32;
+            eprintln!(
+                "[engine] flush: inject_wheel(0, {inject}), pending_y was {:.1}",
+                self.pending_y
+            );
+            self.output.inject_wheel(0, inject);
             self.pending_y -= sign as f64 * WHEEL_DELTA;
         }
         // Zero out negligible residuals left by float arithmetic.
@@ -370,6 +379,7 @@ mod tests {
     #[test]
     fn single_scroll_total_delta() {
         let (mut engine, time, _output) = test_engine();
+        engine.config.scroll.step_size = 1.0; // pin for deterministic assertion
         let anim_time = engine.config.scroll.animation_time as u64;
 
         // One wheel-down notch (delta = -120).
@@ -388,10 +398,9 @@ mod tests {
         }
 
         // Total should be approximately delta * step_size = -120 * 1.0 = -120.
-        let expected = -120.0 * engine.config.scroll.step_size;
         assert!(
-            (total_dy - expected).abs() < 1.0,
-            "total_dy={total_dy:.2}, expected ~{expected}"
+            (total_dy - (-120.0)).abs() < 1.0,
+            "total_dy={total_dy:.2}, expected ~-120.0"
         );
     }
 
@@ -578,9 +587,10 @@ mod tests {
     #[test]
     fn flush_injects_wheel_delta_chunks() {
         let (mut engine, time, output) = test_engine();
+        // Use step_size=1.0 for a simple 1:1 test.
+        engine.config.scroll.step_size = 1.0;
         let anim_time = engine.config.scroll.animation_time as u64;
 
-        // One wheel-down notch with default step_size=1.0.
         // Total animation output ≈ -120 → exactly one WHEEL_DELTA injection.
         time.set(0);
         engine.handle_scroll(-120, false);
@@ -602,12 +612,11 @@ mod tests {
     }
 
     #[test]
-    fn flush_multiple_chunks_for_large_step_size() {
+    fn flush_multiple_chunks_default_step_size() {
         let (mut engine, time, output) = test_engine();
-        engine.config.scroll.step_size = 3.0;
         let anim_time = engine.config.scroll.animation_time as u64;
 
-        // step_size=3.0: total ≈ -360 → 3 injections of -120.
+        // Default step_size=3.0: total ≈ -360 → 3 injections of -120.
         time.set(0);
         engine.handle_scroll(-120, false);
 

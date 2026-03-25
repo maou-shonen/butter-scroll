@@ -106,7 +106,7 @@ impl Default for ScrollConfig {
         Self {
             frame_rate: 150,
             animation_time: 400,
-            step_size: 1.0,
+            step_size: 3.0,
             pulse_algorithm: true,
             pulse_scale: 4.0,
             inverted: false,
@@ -208,7 +208,7 @@ mod tests {
         let cfg = Config::default();
         assert_eq!(cfg.scroll.frame_rate, 150);
         assert_eq!(cfg.scroll.animation_time, 400);
-        assert!((cfg.scroll.step_size - 1.0).abs() < f64::EPSILON);
+        assert!((cfg.scroll.step_size - 3.0).abs() < f64::EPSILON);
         assert!(cfg.scroll.pulse_algorithm);
         assert!((cfg.scroll.pulse_scale - 4.0).abs() < f64::EPSILON);
         assert!(!cfg.scroll.inverted);
@@ -262,7 +262,7 @@ step_size = 2.5
 
         assert_eq!(cfg.scroll.frame_rate, 30);
         assert_eq!(cfg.scroll.animation_time, 1);
-        assert_eq!(cfg.scroll.step_size, 1.0);
+        assert_eq!(cfg.scroll.step_size, 3.0);
         assert_eq!(cfg.scroll.pulse_scale, 4.0);
         assert_eq!(cfg.acceleration.delta_ms, 1);
         assert_eq!(cfg.acceleration.max, 1.0);

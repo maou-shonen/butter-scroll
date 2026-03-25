@@ -60,6 +60,10 @@ impl ScrollOutput for WindowsScrollOutput {
         }
 
         if !inputs.is_empty() {
+            eprintln!(
+                "[injector] SendInput: dx={delta_x}, dy={delta_y}, count={}",
+                inputs.len()
+            );
             // SAFETY: `inputs` points to a valid contiguous buffer and size matches `INPUT`.
             unsafe {
                 let sent = SendInput(
@@ -69,9 +73,11 @@ impl ScrollOutput for WindowsScrollOutput {
                 );
                 if sent != inputs.len() as u32 {
                     eprintln!(
-                        "[butter-scroll] SendInput partial/failed: sent {sent} of {}",
+                        "[injector] SendInput FAILED: sent {sent} of {} (GetLastError may help)",
                         inputs.len()
                     );
+                } else {
+                    eprintln!("[injector] SendInput OK: sent {sent}");
                 }
             }
         }
