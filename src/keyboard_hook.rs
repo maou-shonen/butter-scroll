@@ -6,11 +6,18 @@ use crossbeam_channel::Sender;
 // Constants
 // ---------------------------------------------------------------------------
 
-/// Scroll amount per key group, expressed in wheel notches.
-/// One notch = WHEEL_DELTA (120) in the raw delta fed to the engine.
 const WHEEL_DELTA: i16 = 120;
-const NOTCHES_PAGE: i16 = 5;
+
+/// Arrow key scroll: 1 wheel notch (goes through engine step_size scaling).
 const NOTCHES_LINE: i16 = 1;
+
+/// Assumed viewport height in lines for page scroll calculation.
+/// Combined with the system's "lines per wheel notch" setting
+/// (`SPI_GETWHEELSCROLLLINES`) to compute the wheel delta equivalent
+/// of one page.  This is a best-effort approximation — native Page Down
+/// scrolls the actual viewport height, which we cannot know from a
+/// system-wide hook.
+const PAGE_LINES: f64 = 28.0;
 
 // ---------------------------------------------------------------------------
 // Key classification
@@ -23,9 +30,13 @@ enum KeyGroup {
     Space,
 }
 
-struct KeyAction {
-    delta: i16,
-    group: KeyGroup,
+/// What kind of engine command a key produces.
+enum KeyIntent {
+    /// Line-level scroll (arrows) — goes through engine's step_size scaling.
+    LineScroll { delta: i16, group: KeyGroup },
+    /// Page-level scroll (PageUp/Down, Space) — bypasses step_size scaling.
+    /// Uses pre-calculated delta based on viewport estimate + system settings.
+    PageScroll { direction: f64, group: KeyGroup },
 }
 
 // ---------------------------------------------------------------------------
@@ -153,8 +164,13 @@ mod platform {
 
                     let shift_held = unsafe { GetAsyncKeyState(VK_SHIFT as i32) } < 0;
 
-                    if let Some(action) = classify_key(info.vkCode, shift_held) {
-                        let mode = match action.group {
+                    if let Some(intent) = classify_key(info.vkCode, shift_held) {
+                        let group = match &intent {
+                            KeyIntent::LineScroll { group, .. }
+                            | KeyIntent::PageScroll { group, .. } => *group,
+                        };
+
+                        let mode = match group {
                             KeyGroup::PageUpDown => config.effective_mode(&config.page_up_down),
                             KeyGroup::ArrowKeys => config.effective_mode(&config.arrow_keys),
                             KeyGroup::Space => config.effective_mode(&config.space),
@@ -162,7 +178,7 @@ mod platform {
 
                         // For Page Up/Down and Arrow keys, Shift typically
                         // means selection — pass through.
-                        if shift_held && action.group != KeyGroup::Space {
+                        if shift_held && group != KeyGroup::Space {
                             return unsafe {
                                 CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
                             };
@@ -175,18 +191,23 @@ mod platform {
                         };
 
                         if should_intercept {
+                            let cmd = match intent {
+                                KeyIntent::LineScroll { delta, .. } => EngineCommand::Scroll {
+                                    delta,
+                                    horizontal: false,
+                                },
+                                KeyIntent::PageScroll { direction, .. } => {
+                                    EngineCommand::ScrollRaw {
+                                        delta_y: direction * page_scroll_delta(),
+                                    }
+                                }
+                            };
+
                             // Only swallow the key when the engine actually
                             // accepted the command.  If the channel is dead,
                             // let the original key through so user input is
                             // never silently eaten (mirrors mouse hook).
-                            if state
-                                .engine_tx
-                                .send(EngineCommand::Scroll {
-                                    delta: action.delta,
-                                    horizontal: false,
-                                })
-                                .is_ok()
-                            {
+                            if state.engine_tx.send(cmd).is_ok() {
                                 state.intercepted_vkeys.lock().unwrap().insert(info.vkCode);
                                 return 1; // swallow keydown
                             }
@@ -205,39 +226,74 @@ mod platform {
 
     // -- Helpers ------------------------------------------------------------
 
-    /// Classify a virtual key code into a scroll action.
-    fn classify_key(vk: u32, shift_held: bool) -> Option<KeyAction> {
+    /// Classify a virtual key code into a scroll intent.
+    ///
+    /// Page-level keys produce `PageScroll` (bypasses step_size scaling).
+    /// Line-level keys produce `LineScroll` (uses engine's step_size).
+    fn classify_key(vk: u32, shift_held: bool) -> Option<KeyIntent> {
         let vk16 = vk as u16;
         match vk16 {
-            VK_PRIOR => Some(KeyAction {
-                delta: NOTCHES_PAGE * WHEEL_DELTA, // scroll up
+            VK_PRIOR => Some(KeyIntent::PageScroll {
+                direction: 1.0, // scroll up
                 group: KeyGroup::PageUpDown,
             }),
-            VK_NEXT => Some(KeyAction {
-                delta: -(NOTCHES_PAGE * WHEEL_DELTA), // scroll down
+            VK_NEXT => Some(KeyIntent::PageScroll {
+                direction: -1.0, // scroll down
                 group: KeyGroup::PageUpDown,
             }),
-            VK_UP => Some(KeyAction {
+            VK_UP => Some(KeyIntent::LineScroll {
                 delta: NOTCHES_LINE * WHEEL_DELTA,
                 group: KeyGroup::ArrowKeys,
             }),
-            VK_DOWN => Some(KeyAction {
+            VK_DOWN => Some(KeyIntent::LineScroll {
                 delta: -(NOTCHES_LINE * WHEEL_DELTA),
                 group: KeyGroup::ArrowKeys,
             }),
-            VK_SPACE => {
-                let delta = if shift_held {
-                    NOTCHES_PAGE * WHEEL_DELTA // Shift+Space → scroll up
-                } else {
-                    -(NOTCHES_PAGE * WHEEL_DELTA) // Space → scroll down
-                };
-                Some(KeyAction {
-                    delta,
-                    group: KeyGroup::Space,
-                })
-            }
+            VK_SPACE => Some(KeyIntent::PageScroll {
+                direction: if shift_held { 1.0 } else { -1.0 },
+                group: KeyGroup::Space,
+            }),
             _ => None,
         }
+    }
+
+    /// Calculate the wheel delta equivalent of one page scroll.
+    ///
+    /// Reads `SPI_GETWHEELSCROLLLINES` (system "lines per wheel notch"
+    /// setting, typically 3) and converts an assumed viewport height
+    /// (`PAGE_LINES`) into a wheel delta:
+    ///
+    ///   `delta = (PAGE_LINES / lines_per_notch) × WHEEL_DELTA`
+    ///
+    /// This is a best-effort approximation — native Page Down scrolls
+    /// the actual viewport height, which varies per window.
+    fn page_scroll_delta() -> f64 {
+        let lines_per_notch = get_wheel_scroll_lines();
+        (PAGE_LINES / lines_per_notch as f64) * WHEEL_DELTA as f64
+    }
+
+    /// Read the Windows "lines per mouse wheel notch" system setting.
+    fn get_wheel_scroll_lines() -> u32 {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SystemParametersInfoW, SPI_GETWHEELSCROLLLINES,
+        };
+
+        let mut lines: u32 = 3;
+        // SAFETY: writing to a stack u32 through valid pointer.
+        unsafe {
+            SystemParametersInfoW(
+                SPI_GETWHEELSCROLLLINES,
+                0,
+                &mut lines as *mut u32 as *mut _,
+                0,
+            );
+        }
+        // WHEEL_PAGESCROLL (0xFFFFFFFF) means "one page per notch" —
+        // in that case one notch already is a full page.
+        if lines == 0 || lines == u32::MAX {
+            return 1;
+        }
+        lines
     }
 
     /// Check whether Ctrl, Alt, or Win is currently held.

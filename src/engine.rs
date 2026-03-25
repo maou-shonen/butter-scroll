@@ -147,6 +147,26 @@ impl ScrollEngine {
         self.on_scroll(dx, dy);
     }
 
+    /// Process a pre-scaled scroll event (keyboard page/space scroll).
+    /// Bypasses `step_size` normalization — the delta already represents
+    /// the intended wheel output amount.  Only `inverted` is applied.
+    pub(crate) fn handle_scroll_raw(&mut self, delta_y: f64) {
+        if !self.config.general.enabled {
+            let inject = delta_y.trunc() as i32;
+            if inject != 0 {
+                self.output.inject_wheel(0, inject);
+            }
+            return;
+        }
+
+        let sign = if self.config.scroll.inverted {
+            -1.0
+        } else {
+            1.0
+        };
+        self.on_scroll(0.0, delta_y * sign);
+    }
+
     /// Queue a scroll and apply acceleration (port of JS `scrollArray`).
     pub(crate) fn on_scroll(&mut self, x: f64, y: f64) {
         self.direction_check(x, y);
@@ -329,6 +349,9 @@ impl ScrollEngine {
         match cmd {
             EngineCommand::Scroll { delta, horizontal } => {
                 self.handle_scroll(delta, horizontal);
+            }
+            EngineCommand::ScrollRaw { delta_y } => {
+                self.handle_scroll_raw(delta_y);
             }
             EngineCommand::SetEnabled(on) => {
                 self.config.general.enabled = on;

@@ -1,6 +1,6 @@
 [package]
 name = "butter-scroll"
-version = "0.2.0-pre.2"
+version = "0.2.0-pre.3"
 edition = "2021"
 description = "Buttery smooth mouse wheel scrolling for Windows"
 license = "MIT"
