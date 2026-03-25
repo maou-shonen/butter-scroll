@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::pulse::Pulse;
-use crate::threshold::{AppKey, AppThresholdCache};
+use crate::resolve::ProcessResolver;
+use crate::threshold::{AppKey, AppThresholdCache, ThresholdMode};
 use crate::traits::{EngineCommand, ScrollOutput, TimeSource};
 use crossbeam_channel::Receiver;
 use std::collections::HashMap;
@@ -27,6 +28,7 @@ pub struct ScrollEngine {
     // DI dependencies
     time: Arc<dyn TimeSource>,
     output: Arc<dyn ScrollOutput>,
+    resolver: Arc<dyn ProcessResolver>,
     rx: Receiver<EngineCommand>,
 
     // Config (owned copy — updated via Reload command)
@@ -51,6 +53,7 @@ impl ScrollEngine {
     pub fn new(
         time: Arc<dyn TimeSource>,
         output: Arc<dyn ScrollOutput>,
+        resolver: Arc<dyn ProcessResolver>,
         config: Config,
         rx: Receiver<EngineCommand>,
     ) -> Self {
@@ -58,6 +61,7 @@ impl ScrollEngine {
         Self {
             time,
             output,
+            resolver,
             rx,
             config,
             pulse,
@@ -382,6 +386,31 @@ impl ScrollEngine {
                 target_pid,
             } => {
                 self.current_target_pid = target_pid;
+
+                // Resolve new PIDs to AppKey and apply user overrides
+                if target_pid != 0 && !self.pid_to_key.contains_key(&target_pid) {
+                    if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
+                        // Check for user override first — bypasses detection
+                        let override_val = self
+                            .config
+                            .output
+                            .app_overrides
+                            .get(app_key.exe_path.to_str().unwrap_or(""))
+                            .copied();
+                        if let Some(val) = override_val {
+                            let mode = if val >= 100.0 {
+                                ThresholdMode::Legacy120
+                            } else {
+                                ThresholdMode::SmoothOk
+                            };
+                            if let Ok(mut cache) = self.threshold_cache.lock() {
+                                cache.set_mode(app_key.clone(), mode);
+                            }
+                        }
+                        self.pid_to_key.insert(target_pid, app_key);
+                    }
+                }
+
                 self.handle_scroll(delta, horizontal);
             }
             EngineCommand::ScrollRaw { delta_y } => {
@@ -413,6 +442,7 @@ impl ScrollEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resolve::MockProcessResolver;
     use crate::threshold::ThresholdMode;
     use crate::traits::{MockOutput, MockTime};
     use std::path::PathBuf;
@@ -420,11 +450,18 @@ mod tests {
     /// Helper — build an engine with mock deps (no channel needed for
     /// direct method testing).
     fn test_engine() -> (ScrollEngine, Arc<MockTime>, Arc<MockOutput>) {
+        test_engine_with_resolver(None)
+    }
+
+    fn test_engine_with_resolver(
+        result: Option<AppKey>,
+    ) -> (ScrollEngine, Arc<MockTime>, Arc<MockOutput>) {
         let time = Arc::new(MockTime::new());
         let output = Arc::new(MockOutput::new());
+        let resolver = Arc::new(MockProcessResolver { result });
         let config = Config::default();
         let (_tx, rx) = crossbeam_channel::unbounded();
-        let engine = ScrollEngine::new(time.clone(), output.clone(), config, rx);
+        let engine = ScrollEngine::new(time.clone(), output.clone(), resolver, config, rx);
         (engine, time, output)
     }
 
@@ -899,5 +936,133 @@ mod tests {
         engine.pending_y = -40.0;
         engine.flush_pending();
         assert_eq!(output.drain(), vec![(0, -40)]);
+    }
+
+    // -- PID resolution tests -----------------------------------------------
+
+    #[test]
+    fn pid_resolution_populates_key_map() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/test.exe"),
+            exe_mtime: Some(12345),
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        assert!(engine.pid_to_key.is_empty());
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 42,
+        });
+
+        assert_eq!(engine.pid_to_key.get(&42), Some(&app_key));
+        assert_eq!(engine.current_target_pid, 42);
+    }
+
+    #[test]
+    fn failed_resolution_uses_global_default() {
+        // MockResolver returns None — simulates OpenProcess failure
+        let (mut engine, time, output) = test_engine_with_resolver(None);
+        engine.config.output.inject_threshold = 40.0;
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 999,
+        });
+
+        // No entry in pid_to_key
+        assert!(!engine.pid_to_key.contains_key(&999));
+        // Engine should still function — uses global threshold
+        assert_eq!(engine.current_target_pid, 999);
+        // Scroll was processed (queue has items or output was produced)
+        assert!(!engine.queue.is_empty() || !output.drain().is_empty());
+    }
+
+    #[test]
+    fn pid_resolution_applies_user_override_legacy() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/legacy/notepad.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        // Configure user override for this exe path
+        engine
+            .config
+            .output
+            .app_overrides
+            .insert("C:/legacy/notepad.exe".to_string(), 120.0);
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 100,
+        });
+
+        // Should have resolved and applied override
+        assert_eq!(engine.pid_to_key.get(&100), Some(&app_key));
+        let cache = engine.threshold_cache.lock().unwrap();
+        assert_eq!(
+            cache.get_mode(&app_key),
+            Some(&ThresholdMode::Legacy120),
+            "user override >= 100 should set Legacy120"
+        );
+    }
+
+    #[test]
+    fn pid_resolution_applies_user_override_smooth() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/modern/app.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        engine
+            .config
+            .output
+            .app_overrides
+            .insert("C:/modern/app.exe".to_string(), 1.0);
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 200,
+        });
+
+        assert_eq!(engine.pid_to_key.get(&200), Some(&app_key));
+        let cache = engine.threshold_cache.lock().unwrap();
+        assert_eq!(
+            cache.get_mode(&app_key),
+            Some(&ThresholdMode::SmoothOk),
+            "user override < 100 should set SmoothOk"
+        );
+    }
+
+    #[test]
+    fn pid_resolution_skips_already_resolved() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/cached.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        // Pre-populate pid_to_key
+        engine.pid_to_key.insert(50, app_key.clone());
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 50,
+        });
+
+        // Should still have the same entry (resolver not called again)
+        assert_eq!(engine.pid_to_key.get(&50), Some(&app_key));
     }
 }

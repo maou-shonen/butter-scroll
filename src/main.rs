@@ -6,6 +6,8 @@ mod hook;
 mod injector;
 mod keyboard_hook;
 mod pulse;
+mod resolve;
+mod resolve_win;
 mod threshold;
 mod traits;
 mod tray;
@@ -25,6 +27,8 @@ use crate::hook::MouseHook;
 use crate::injector::WindowsScrollOutput;
 #[cfg(target_os = "windows")]
 use crate::keyboard_hook::KeyboardHook;
+#[cfg(target_os = "windows")]
+use crate::resolve_win::WindowsProcessResolver;
 #[cfg(target_os = "windows")]
 use crate::traits::{EngineCommand, SystemClock};
 #[cfg(target_os = "windows")]
@@ -62,8 +66,9 @@ fn run_windows() -> Result<(), String> {
 
     let output = Arc::new(WindowsScrollOutput::new());
     let clock = Arc::new(SystemClock::new());
+    let resolver = Arc::new(WindowsProcessResolver::new());
 
-    let mut engine = ScrollEngine::new(clock, output, config.clone(), engine_rx);
+    let mut engine = ScrollEngine::new(clock, output, resolver, config.clone(), engine_rx);
     let engine_thread = std::thread::spawn(move || engine.run());
 
     // 3) Install low-level hooks
