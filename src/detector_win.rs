@@ -111,8 +111,9 @@ impl WindowsScrollDetector {
 
     fn get_scroll_pos(hwnd: isize) -> Option<i32> {
         use windows_sys::Win32::Foundation::HWND;
-        use windows_sys::Win32::UI::Controls::{GetScrollInfo, SCROLLINFO, SIF_POS};
-        use windows_sys::Win32::UI::WindowsAndMessaging::SB_VERT;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetScrollInfo, SB_VERT, SCROLLINFO, SIF_POS,
+        };
 
         let mut info = SCROLLINFO {
             cbSize: std::mem::size_of::<SCROLLINFO>() as u32,
