@@ -636,7 +636,10 @@ mod tests {
         // Manually set pending below threshold — no injection.
         engine.pending_y = -100.0;
         engine.flush_pending();
-        assert!(output.drain().is_empty(), "should not inject below WHEEL_DELTA");
+        assert!(
+            output.drain().is_empty(),
+            "should not inject below WHEEL_DELTA"
+        );
         assert!(
             (engine.pending_y - (-100.0)).abs() < f64::EPSILON,
             "remainder should be preserved"
@@ -666,7 +669,10 @@ mod tests {
         time.set(10);
         engine.on_scroll(0.0, 100.0); // reverse direction
 
-        assert_eq!(engine.pending_y, 0.0, "pending should be cleared on direction change");
+        assert_eq!(
+            engine.pending_y, 0.0,
+            "pending should be cleared on direction change"
+        );
     }
 
     #[test]
