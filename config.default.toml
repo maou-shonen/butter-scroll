@@ -84,8 +84,8 @@ enabled = true
 # Intercepted keys are suppressed and replaced with smoothed wheel events
 # using the same animation engine as mouse scrolling.
 #
-# Master switch — keyboard smooth scrolling is opt-in.
-enabled = false
+# Master switch for keyboard smooth scrolling.
+enabled = true
 
 # Default activation mode for all key groups.
 # Each group below can override this value individually.

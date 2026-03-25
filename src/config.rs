@@ -125,7 +125,7 @@ impl KeyboardConfig {
 impl Default for KeyboardConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             mode: KeyboardMode::Always,
             // Page Up/Down inherits parent mode (low risk).
             page_up_down: KeyGroupConfig { mode: None },
@@ -399,7 +399,7 @@ step_size = 2.5
     #[test]
     fn keyboard_defaults() {
         let cfg = KeyboardConfig::default();
-        assert!(!cfg.enabled);
+        assert!(cfg.enabled);
         assert_eq!(cfg.mode, KeyboardMode::Always);
         // page_up_down inherits parent.
         assert_eq!(cfg.page_up_down.mode, None);
@@ -510,7 +510,7 @@ mode = "always"
 step_size = 50.0
 "#;
         let cfg: Config = toml::from_str(text).unwrap();
-        assert!(!cfg.keyboard.enabled);
+        assert!(cfg.keyboard.enabled);
         assert_eq!(cfg.keyboard.mode, KeyboardMode::Always);
         assert_eq!(cfg.keyboard.arrow_keys.mode, Some(KeyboardMode::Off));
     }
