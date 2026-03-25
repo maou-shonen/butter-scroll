@@ -22,6 +22,8 @@ use crate::autostart::{AutoStartService, WindowsAutoStart};
 #[cfg(target_os = "windows")]
 use crate::config::{ConfigStore, FileConfigStore};
 #[cfg(target_os = "windows")]
+use crate::detector_win::WindowsScrollDetector;
+#[cfg(target_os = "windows")]
 use crate::engine::ScrollEngine;
 #[cfg(target_os = "windows")]
 use crate::hook::MouseHook;
@@ -69,8 +71,17 @@ fn run_windows() -> Result<(), String> {
     let output = Arc::new(WindowsScrollOutput::new());
     let clock = Arc::new(SystemClock::new());
     let resolver = Arc::new(WindowsProcessResolver::new());
+    let detector = Box::new(WindowsScrollDetector::new());
 
-    let mut engine = ScrollEngine::new(clock, output, resolver, config.clone(), engine_rx);
+    let mut engine = ScrollEngine::new(
+        clock,
+        output,
+        resolver,
+        detector,
+        config.clone(),
+        engine_tx.clone(),
+        engine_rx,
+    );
     let engine_thread = std::thread::spawn(move || engine.run());
 
     // 3) Install low-level hooks

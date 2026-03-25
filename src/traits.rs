@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::threshold::{AppKey, ThresholdMode};
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -37,8 +38,20 @@ pub enum EngineCommand {
     SetEnabled(bool),
     /// Hot-reload config.
     Reload(Box<Config>),
+    /// Async threshold detection result from detector thread.
+    DetectResult {
+        app_key: AppKey,
+        mode: ThresholdMode,
+    },
     /// Shut down the engine thread.
     Stop,
+}
+
+/// Request payload sent from engine to detector thread.
+pub struct DetectRequest {
+    pub hwnd: isize,
+    pub app_key: AppKey,
+    pub expected_delta: f64,
 }
 
 // ---------------------------------------------------------------------------

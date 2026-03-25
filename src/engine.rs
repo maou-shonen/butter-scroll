@@ -1,11 +1,13 @@
 use crate::config::Config;
+use crate::detector::ScrollDetector;
 use crate::pulse::Pulse;
 use crate::resolve::ProcessResolver;
 use crate::threshold::{AppKey, AppThresholdCache, ThresholdMode};
-use crate::traits::{EngineCommand, ScrollOutput, TimeSource};
-use crossbeam_channel::Receiver;
+use crate::traits::{DetectRequest, EngineCommand, ScrollOutput, TimeSource};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
@@ -30,6 +32,7 @@ pub struct ScrollEngine {
     output: Arc<dyn ScrollOutput>,
     resolver: Arc<dyn ProcessResolver>,
     rx: Receiver<EngineCommand>,
+    detect_tx: Sender<DetectRequest>,
 
     // Config (owned copy — updated via Reload command)
     config: Config,
@@ -54,15 +57,29 @@ impl ScrollEngine {
         time: Arc<dyn TimeSource>,
         output: Arc<dyn ScrollOutput>,
         resolver: Arc<dyn ProcessResolver>,
+        detector: Box<dyn ScrollDetector>,
         config: Config,
+        tx: Sender<EngineCommand>,
         rx: Receiver<EngineCommand>,
     ) -> Self {
+        let (detect_tx, detect_rx) = unbounded::<DetectRequest>();
+        thread::spawn(move || {
+            while let Ok(req) = detect_rx.recv() {
+                let mode = detector.detect(req.hwnd, req.expected_delta);
+                let _ = tx.send(EngineCommand::DetectResult {
+                    app_key: req.app_key,
+                    mode,
+                });
+            }
+        });
+
         let pulse = Pulse::new(config.scroll.pulse_scale, config.scroll.pulse_normalize);
         Self {
             time,
             output,
             resolver,
             rx,
+            detect_tx,
             config,
             pulse,
             queue: Vec::with_capacity(32),
@@ -411,6 +428,24 @@ impl ScrollEngine {
                     }
                 }
 
+                if let Some(app_key) = self.pid_to_key.get(&target_pid).cloned() {
+                    let should_detect = {
+                        if let Ok(mut cache) = self.threshold_cache.lock() {
+                            cache.start_detecting(app_key.clone())
+                        } else {
+                            false
+                        }
+                    };
+
+                    if should_detect {
+                        let _ = self.detect_tx.send(DetectRequest {
+                            hwnd: 0,
+                            app_key,
+                            expected_delta: self.config.scroll.step_size,
+                        });
+                    }
+                }
+
                 self.handle_scroll(delta, horizontal);
             }
             EngineCommand::ScrollRaw { delta_y } => {
@@ -429,6 +464,11 @@ impl ScrollEngine {
             EngineCommand::Reload(cfg) => {
                 self.apply_config(*cfg);
             }
+            EngineCommand::DetectResult { app_key, mode } => {
+                if let Ok(mut cache) = self.threshold_cache.lock() {
+                    cache.set_mode(app_key, mode);
+                }
+            }
             EngineCommand::Stop => return false,
         }
         true
@@ -442,6 +482,7 @@ impl ScrollEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::detector::MockScrollDetector;
     use crate::resolve::MockProcessResolver;
     use crate::threshold::ThresholdMode;
     use crate::traits::{MockOutput, MockTime};
@@ -459,9 +500,12 @@ mod tests {
         let time = Arc::new(MockTime::new());
         let output = Arc::new(MockOutput::new());
         let resolver = Arc::new(MockProcessResolver { result });
+        let detector = Box::new(MockScrollDetector {
+            result: ThresholdMode::SmoothOk,
+        });
         let config = Config::default();
-        let (_tx, rx) = crossbeam_channel::unbounded();
-        let engine = ScrollEngine::new(time.clone(), output.clone(), resolver, config, rx);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let engine = ScrollEngine::new(time.clone(), output.clone(), resolver, detector, config, tx, rx);
         (engine, time, output)
     }
 
@@ -1064,5 +1108,59 @@ mod tests {
 
         // Should still have the same entry (resolver not called again)
         assert_eq!(engine.pid_to_key.get(&50), Some(&app_key));
+    }
+
+    #[test]
+    fn detection_triggers_for_unknown_app() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/detect.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 314,
+        });
+
+        std::thread::sleep(Duration::from_millis(10));
+        assert!(engine.drain_commands());
+
+        let cache = engine.threshold_cache.lock().unwrap();
+        assert_eq!(cache.get_mode(&app_key), Some(&ThresholdMode::SmoothOk));
+    }
+
+    #[test]
+    fn no_duplicate_detection_for_detecting_app() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/detect-once.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 2718,
+        });
+
+        {
+            let cache = engine.threshold_cache.lock().unwrap();
+            assert_eq!(cache.get_mode(&app_key), Some(&ThresholdMode::Detecting));
+        }
+
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 2718,
+        });
+
+        {
+            let cache = engine.threshold_cache.lock().unwrap();
+            assert_eq!(cache.get_mode(&app_key), Some(&ThresholdMode::Detecting));
+        }
     }
 }
