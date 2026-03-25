@@ -1,8 +1,10 @@
 use crate::config::Config;
 use crate::pulse::Pulse;
+use crate::threshold::{AppKey, AppThresholdCache};
 use crate::traits::{EngineCommand, ScrollOutput, TimeSource};
 use crossbeam_channel::Receiver;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
@@ -36,6 +38,8 @@ pub struct ScrollEngine {
     direction: (i8, i8),
     last_scroll_time: u64,
     current_target_pid: u32,
+    pid_to_key: HashMap<u32, AppKey>,
+    threshold_cache: Arc<Mutex<AppThresholdCache>>,
 
     // Accumulator — collects animation output and injects once configured
     // threshold is reached.
@@ -61,9 +65,15 @@ impl ScrollEngine {
             direction: (0, 0),
             last_scroll_time: 0,
             current_target_pid: 0,
+            pid_to_key: HashMap::new(),
+            threshold_cache: Arc::new(Mutex::new(AppThresholdCache::new())),
             pending_x: 0.0,
             pending_y: 0.0,
         }
+    }
+
+    pub fn set_threshold_cache(&mut self, cache: Arc<Mutex<AppThresholdCache>>) {
+        self.threshold_cache = cache;
     }
 
     // -- public (for tests) -------------------------------------------------
@@ -227,7 +237,7 @@ impl ScrollEngine {
     }
 
     pub(crate) fn flush_pending(&mut self) {
-        let threshold = self.config.output.inject_threshold;
+        let threshold = self.threshold_for_current_pid();
         const EPS: f64 = 1e-9;
 
         if self.pending_y.abs() + EPS >= threshold {
@@ -258,6 +268,23 @@ impl ScrollEngine {
     }
 
     // -- private helpers ----------------------------------------------------
+
+    fn threshold_for_current_pid(&self) -> f64 {
+        if self.current_target_pid == 0 {
+            return self.config.output.inject_threshold;
+        }
+
+        let app_key = self.pid_to_key.get(&self.current_target_pid);
+        if app_key.is_none() {
+            return self.config.output.inject_threshold;
+        }
+
+        if let Ok(cache) = self.threshold_cache.lock() {
+            cache.get_threshold(app_key)
+        } else {
+            self.config.output.inject_threshold
+        }
+    }
 
     /// If the scroll direction changed, clear the queue and reset
     /// acceleration (port of JS `directionCheck`).
@@ -386,7 +413,9 @@ impl ScrollEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::threshold::ThresholdMode;
     use crate::traits::{MockOutput, MockTime};
+    use std::path::PathBuf;
 
     /// Helper — build an engine with mock deps (no channel needed for
     /// direct method testing).
@@ -805,5 +834,70 @@ mod tests {
         let events = output.drain();
         assert_eq!(events, vec![(0, -130)]);
         assert_eq!(engine.pending_y, 0.0);
+    }
+
+    #[test]
+    fn flush_uses_per_app_threshold_legacy() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = 40.0;
+
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/legacy/app.exe"),
+            exe_mtime: None,
+        };
+        let cache = Arc::new(Mutex::new(AppThresholdCache::new()));
+        cache
+            .lock()
+            .unwrap()
+            .set_mode(app_key.clone(), ThresholdMode::Legacy120);
+        engine.set_threshold_cache(cache);
+        engine.pid_to_key.insert(1234, app_key);
+        engine.current_target_pid = 1234;
+
+        engine.pending_y = -100.0;
+        engine.flush_pending();
+        assert!(output.drain().is_empty(), "legacy threshold=120 should not flush at 100");
+
+        engine.pending_y = -120.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -120)]);
+    }
+
+    #[test]
+    fn flush_uses_per_app_threshold_smooth() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = 120.0;
+
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/smooth/app.exe"),
+            exe_mtime: None,
+        };
+        let cache = Arc::new(Mutex::new(AppThresholdCache::new()));
+        cache
+            .lock()
+            .unwrap()
+            .set_mode(app_key.clone(), ThresholdMode::SmoothOk);
+        engine.set_threshold_cache(cache);
+        engine.pid_to_key.insert(5678, app_key);
+        engine.current_target_pid = 5678;
+
+        engine.pending_y = -1.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -1)]);
+    }
+
+    #[test]
+    fn flush_falls_back_to_global() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = 40.0;
+        engine.current_target_pid = 7777;
+
+        engine.pending_y = -39.0;
+        engine.flush_pending();
+        assert!(output.drain().is_empty(), "should honor global threshold without pid mapping");
+
+        engine.pending_y = -40.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -40)]);
     }
 }
