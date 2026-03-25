@@ -1,4 +1,4 @@
-use crate::threshold::{AppKey, ThresholdMode};
+use crate::threshold::ThresholdMode;
 
 pub trait ScrollDetector: Send {
     fn detect(&self, hwnd: isize, expected_delta: f64) -> ThresholdMode;
