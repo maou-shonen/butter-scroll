@@ -14,6 +14,7 @@ pub struct Config {
     pub acceleration: AccelerationConfig,
     pub output: OutputConfig,
     pub general: GeneralConfig,
+    pub keyboard: KeyboardConfig,
 }
 
 /// Scroll animation parameters.
@@ -69,6 +70,78 @@ pub struct GeneralConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard smooth scrolling
+// ---------------------------------------------------------------------------
+
+/// Per-key-group activation mode.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum KeyboardMode {
+    /// Never intercept this key group.
+    Off,
+    /// Always intercept and convert to smooth scroll.
+    Always,
+    /// Only intercept when the focused window has a standard Win32 scrollbar.
+    Win32Scrollbar,
+}
+
+/// Configuration for a single key group (e.g. Page Up/Down).
+///
+/// When `mode` is `None`, the group inherits the parent `[keyboard].mode`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyGroupConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<KeyboardMode>,
+}
+
+/// Keyboard smooth scrolling configuration.
+///
+/// `mode` acts as the default for all key groups; each group can override
+/// it with its own `mode` value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyboardConfig {
+    /// Master switch — keyboard smooth scrolling is opt-in.
+    pub enabled: bool,
+    /// Default mode applied to key groups that don't specify their own.
+    pub mode: KeyboardMode,
+    /// Page Up / Page Down — low conflict risk.
+    pub page_up_down: KeyGroupConfig,
+    /// Arrow Up / Arrow Down — high conflict risk (cursor movement, etc.).
+    pub arrow_keys: KeyGroupConfig,
+    /// Space / Shift+Space — medium risk (character input in editors).
+    pub space: KeyGroupConfig,
+}
+
+impl KeyboardConfig {
+    /// Resolve the effective mode for a key group, falling back to the
+    /// parent default when the group doesn't specify its own.
+    pub fn effective_mode(&self, group: &KeyGroupConfig) -> KeyboardMode {
+        group.mode.unwrap_or(self.mode)
+    }
+}
+
+impl Default for KeyboardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: KeyboardMode::Always,
+            // Page Up/Down inherits parent mode (low risk).
+            page_up_down: KeyGroupConfig { mode: None },
+            // Arrow keys default to off (high risk).
+            arrow_keys: KeyGroupConfig {
+                mode: Some(KeyboardMode::Off),
+            },
+            // Space defaults to off (medium risk).
+            space: KeyGroupConfig {
+                mode: Some(KeyboardMode::Off),
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Config methods
 // ---------------------------------------------------------------------------
 
@@ -112,6 +185,10 @@ impl Config {
             self.output.inject_threshold = OutputConfig::default().inject_threshold;
         }
         self.output.inject_threshold = self.output.inject_threshold.clamp(1.0, 120.0);
+
+        // Keyboard config: nothing numeric to clamp, but ensure mode
+        // inheritance is consistent — a group set to `None` is valid
+        // (inherits parent), so no fixup needed.
     }
 }
 
@@ -285,6 +362,7 @@ step_size = 2.5
                 inject_threshold: f64::NEG_INFINITY,
             },
             general: GeneralConfig::default(),
+            keyboard: KeyboardConfig::default(),
         };
 
         cfg.sanitize();
@@ -314,5 +392,126 @@ step_size = 2.5
         assert_eq!(cfg.scroll.pulse_scale, 0.1);
         assert_eq!(cfg.scroll.pulse_normalize, 10.0);
         assert_eq!(cfg.output.inject_threshold, 120.0);
+    }
+
+    // -- Keyboard config tests ----------------------------------------------
+
+    #[test]
+    fn keyboard_defaults() {
+        let cfg = KeyboardConfig::default();
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.mode, KeyboardMode::Always);
+        // page_up_down inherits parent.
+        assert_eq!(cfg.page_up_down.mode, None);
+        // arrow_keys and space default to off (safety).
+        assert_eq!(cfg.arrow_keys.mode, Some(KeyboardMode::Off));
+        assert_eq!(cfg.space.mode, Some(KeyboardMode::Off));
+    }
+
+    #[test]
+    fn keyboard_effective_mode_inherits() {
+        let cfg = KeyboardConfig::default();
+        // page_up_down.mode is None → inherits parent "always".
+        assert_eq!(cfg.effective_mode(&cfg.page_up_down), KeyboardMode::Always);
+        // arrow_keys has explicit "off" → overrides parent.
+        assert_eq!(cfg.effective_mode(&cfg.arrow_keys), KeyboardMode::Off);
+    }
+
+    #[test]
+    fn keyboard_effective_mode_override() {
+        let mut cfg = KeyboardConfig::default();
+        cfg.mode = KeyboardMode::Win32Scrollbar;
+        // page_up_down inherits new parent mode.
+        assert_eq!(
+            cfg.effective_mode(&cfg.page_up_down),
+            KeyboardMode::Win32Scrollbar
+        );
+        // arrow_keys still has its own override.
+        assert_eq!(cfg.effective_mode(&cfg.arrow_keys), KeyboardMode::Off);
+
+        // Explicitly set arrow_keys to always.
+        cfg.arrow_keys.mode = Some(KeyboardMode::Always);
+        assert_eq!(cfg.effective_mode(&cfg.arrow_keys), KeyboardMode::Always);
+    }
+
+    #[test]
+    fn keyboard_toml_minimal() {
+        let text = r#"
+[keyboard]
+enabled = true
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert!(cfg.keyboard.enabled);
+        assert_eq!(cfg.keyboard.mode, KeyboardMode::Always);
+        // Sub-groups fall back to defaults.
+        assert_eq!(cfg.keyboard.page_up_down.mode, None);
+        assert_eq!(cfg.keyboard.arrow_keys.mode, Some(KeyboardMode::Off));
+    }
+
+    #[test]
+    fn keyboard_toml_full() {
+        let text = r#"
+[keyboard]
+enabled = true
+mode = "win32_scrollbar"
+
+[keyboard.page_up_down]
+# inherits win32_scrollbar
+
+[keyboard.arrow_keys]
+mode = "win32_scrollbar"
+
+[keyboard.space]
+mode = "always"
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert!(cfg.keyboard.enabled);
+        assert_eq!(cfg.keyboard.mode, KeyboardMode::Win32Scrollbar);
+        assert_eq!(cfg.keyboard.page_up_down.mode, None);
+        assert_eq!(
+            cfg.keyboard.arrow_keys.mode,
+            Some(KeyboardMode::Win32Scrollbar)
+        );
+        assert_eq!(cfg.keyboard.space.mode, Some(KeyboardMode::Always));
+
+        // Effective mode checks.
+        assert_eq!(
+            cfg.keyboard.effective_mode(&cfg.keyboard.page_up_down),
+            KeyboardMode::Win32Scrollbar
+        );
+        assert_eq!(
+            cfg.keyboard.effective_mode(&cfg.keyboard.arrow_keys),
+            KeyboardMode::Win32Scrollbar
+        );
+        assert_eq!(
+            cfg.keyboard.effective_mode(&cfg.keyboard.space),
+            KeyboardMode::Always
+        );
+    }
+
+    #[test]
+    fn keyboard_toml_round_trip() {
+        let cfg = Config::default();
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        let parsed: Config = toml::from_str(&text).unwrap();
+        assert_eq!(parsed.keyboard.enabled, cfg.keyboard.enabled);
+        assert_eq!(parsed.keyboard.mode, cfg.keyboard.mode);
+        assert_eq!(
+            parsed.keyboard.arrow_keys.mode,
+            cfg.keyboard.arrow_keys.mode
+        );
+    }
+
+    #[test]
+    fn keyboard_absent_section_uses_defaults() {
+        // No [keyboard] section at all → entire struct defaults.
+        let text = r#"
+[scroll]
+step_size = 50.0
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert!(!cfg.keyboard.enabled);
+        assert_eq!(cfg.keyboard.mode, KeyboardMode::Always);
+        assert_eq!(cfg.keyboard.arrow_keys.mode, Some(KeyboardMode::Off));
     }
 }

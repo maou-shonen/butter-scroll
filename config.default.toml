@@ -77,3 +77,43 @@ autostart = false
 
 # Master switch. When false, wheel events pass through unmodified.
 enabled = true
+
+[keyboard]
+
+# Smooth scrolling for keyboard scroll keys (Page Up/Down, arrows, Space).
+# Intercepted keys are suppressed and replaced with smoothed wheel events
+# using the same animation engine as mouse scrolling.
+#
+# Master switch — keyboard smooth scrolling is opt-in.
+enabled = false
+
+# Default activation mode for all key groups.
+# Each group below can override this value individually.
+#
+# Available modes:
+#   "off"              — never intercept (pass-through)
+#   "always"           — always intercept and smooth-scroll
+#   "win32_scrollbar"  — only intercept when the focused window has a
+#                        standard Win32 scrollbar (WS_VSCROLL). Note:
+#                        modern apps (Electron, browsers, WPF) use custom
+#                        scrollbars and won't be detected by this mode.
+mode = "always"
+
+# --- Key groups ---
+# Omit `mode` to inherit from [keyboard].mode above.
+
+[keyboard.page_up_down]
+# Page Up / Page Down — low conflict risk.
+# Inherits mode from parent (default: "always").
+
+[keyboard.arrow_keys]
+# Arrow Up / Down — HIGH conflict risk.
+# These keys are used for cursor movement in editors, game input, etc.
+# Shift+Arrow is always passed through (selection in editors).
+mode = "off"
+
+[keyboard.space]
+# Space / Shift+Space — medium conflict risk.
+# Space scrolls down in browsers; Shift+Space scrolls up.
+# In editors and other apps, Space is character input.
+mode = "off"

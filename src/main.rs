@@ -4,6 +4,7 @@ mod config;
 mod engine;
 mod hook;
 mod injector;
+mod keyboard_hook;
 mod pulse;
 mod traits;
 mod tray;
@@ -21,6 +22,8 @@ use crate::engine::ScrollEngine;
 use crate::hook::MouseHook;
 #[cfg(target_os = "windows")]
 use crate::injector::WindowsScrollOutput;
+#[cfg(target_os = "windows")]
+use crate::keyboard_hook::KeyboardHook;
 #[cfg(target_os = "windows")]
 use crate::traits::{EngineCommand, SystemClock};
 #[cfg(target_os = "windows")]
@@ -62,8 +65,12 @@ fn run_windows() -> Result<(), String> {
     let mut engine = ScrollEngine::new(clock, output, config.clone(), engine_rx);
     let engine_thread = std::thread::spawn(move || engine.run());
 
-    // 3) Install low-level mouse hook
-    let _hook = MouseHook::install(engine_tx.clone())?;
+    // 3) Install low-level hooks
+    let _mouse_hook = MouseHook::install(engine_tx.clone())?;
+    let _keyboard_hook = KeyboardHook::install(engine_tx.clone(), config.keyboard.clone())?;
+    // Ensure keyboard hook respects global enabled state at startup
+    // (e.g. config has general.enabled=false + keyboard.enabled=true).
+    sync_keyboard_hook(&config);
 
     // 4) Create system tray
     let _tray = tray::TrayIcon::create(app_tx)?;
@@ -94,11 +101,20 @@ fn run_windows() -> Result<(), String> {
                 AppCommand::ToggleEnabled => {
                     config.general.enabled = !config.general.enabled;
                     let _ = engine_tx.send(EngineCommand::SetEnabled(config.general.enabled));
+                    // When globally disabled, also pause keyboard hook so
+                    // keys pass through natively (not converted to wheel).
+                    sync_keyboard_hook(&config);
+                    let _ = store.save(&config);
+                }
+                AppCommand::ToggleKeyboard => {
+                    config.keyboard.enabled = !config.keyboard.enabled;
+                    sync_keyboard_hook(&config);
                     let _ = store.save(&config);
                 }
                 AppCommand::ReloadConfig => {
                     config = store.load();
                     let _ = engine_tx.send(EngineCommand::Reload(Box::new(config.clone())));
+                    sync_keyboard_hook(&config);
                 }
                 AppCommand::ToggleAutostart => {
                     let next = !autostart.is_enabled();
@@ -119,4 +135,19 @@ fn run_windows() -> Result<(), String> {
     let _ = engine_thread.join();
 
     Ok(())
+}
+
+/// Push the effective keyboard config to the hook, accounting for the
+/// global `general.enabled` master switch.  When the app is globally
+/// disabled, the keyboard hook must also stop intercepting keys so they
+/// pass through with their native behaviour (not converted to wheel events).
+#[cfg(target_os = "windows")]
+fn sync_keyboard_hook(config: &crate::config::Config) {
+    if config.general.enabled {
+        KeyboardHook::update_config(&config.keyboard);
+    } else {
+        let mut paused = config.keyboard.clone();
+        paused.enabled = false;
+        KeyboardHook::update_config(&paused);
+    }
 }

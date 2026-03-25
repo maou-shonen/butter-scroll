@@ -33,9 +33,11 @@ const MENU_TOGGLE_ENABLED: usize = 1001;
 #[cfg(target_os = "windows")]
 const MENU_RELOAD_CONFIG: usize = 1002;
 #[cfg(target_os = "windows")]
-const MENU_TOGGLE_AUTOSTART: usize = 1003;
+const MENU_TOGGLE_KEYBOARD: usize = 1003;
 #[cfg(target_os = "windows")]
-const MENU_EXIT: usize = 1004;
+const MENU_TOGGLE_AUTOSTART: usize = 1004;
+#[cfg(target_os = "windows")]
+const MENU_EXIT: usize = 1005;
 
 #[cfg(target_os = "windows")]
 static APP_TX: OnceLock<Sender<AppCommand>> = OnceLock::new();
@@ -115,6 +117,12 @@ impl TrayIcon {
             AppendMenuW(
                 menu,
                 MF_STRING,
+                MENU_TOGGLE_KEYBOARD,
+                to_wide("鍵盤平滑捲動").as_ptr(),
+            );
+            AppendMenuW(
+                menu,
+                MF_STRING,
                 MENU_RELOAD_CONFIG,
                 to_wide("重新載入設定").as_ptr(),
             );
@@ -130,7 +138,7 @@ impl TrayIcon {
 
         // SAFETY: built-in application icon.
         let icon = unsafe { LoadIconW(std::ptr::null_mut(), IDI_APPLICATION) };
-        let mut nid = NOTIFYICONDATAW {
+        let nid = NOTIFYICONDATAW {
             cbSize: std::mem::size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: hwnd,
             uID: 1,
@@ -142,7 +150,7 @@ impl TrayIcon {
         };
 
         // SAFETY: nid is fully initialized.
-        let ok = unsafe { Shell_NotifyIconW(NIM_ADD, &mut nid) };
+        let ok = unsafe { Shell_NotifyIconW(NIM_ADD, &nid) };
         if ok == 0 {
             // SAFETY: cleanup handles.
             unsafe {
@@ -161,7 +169,7 @@ impl Drop for TrayIcon {
     fn drop(&mut self) {
         // SAFETY: handles belong to this struct.
         unsafe {
-            let _ = Shell_NotifyIconW(NIM_DELETE, &mut self.nid);
+            let _ = Shell_NotifyIconW(NIM_DELETE, &self.nid);
             DestroyMenu(self.menu);
             DestroyWindow(self.hwnd);
         }
@@ -179,10 +187,11 @@ extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM
             0
         }
         WM_COMMAND => {
-            let id = (wparam & 0xFFFF) as usize;
+            let id = wparam & 0xFFFF;
             if let Some(tx) = APP_TX.get() {
                 let _ = match id {
                     MENU_TOGGLE_ENABLED => tx.send(AppCommand::ToggleEnabled),
+                    MENU_TOGGLE_KEYBOARD => tx.send(AppCommand::ToggleKeyboard),
                     MENU_RELOAD_CONFIG => tx.send(AppCommand::ReloadConfig),
                     MENU_TOGGLE_AUTOSTART => tx.send(AppCommand::ToggleAutostart),
                     MENU_EXIT => tx.send(AppCommand::Exit),
@@ -218,6 +227,12 @@ fn show_context_menu(hwnd: HWND) {
             MF_STRING,
             MENU_TOGGLE_ENABLED,
             to_wide("啟用 / 停用").as_ptr(),
+        );
+        AppendMenuW(
+            menu,
+            MF_STRING,
+            MENU_TOGGLE_KEYBOARD,
+            to_wide("鍵盤平滑捲動").as_ptr(),
         );
         AppendMenuW(
             menu,
