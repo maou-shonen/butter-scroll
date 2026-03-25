@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 // ---------------------------------------------------------------------------
 
 /// Top-level configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub scroll: ScrollConfig,
@@ -54,18 +54,8 @@ pub struct GeneralConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Defaults (matching gblazex/smoothscroll)
+// Config methods
 // ---------------------------------------------------------------------------
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            scroll: ScrollConfig::default(),
-            acceleration: AccelerationConfig::default(),
-            general: GeneralConfig::default(),
-        }
-    }
-}
 
 impl Config {
     /// Normalize and clamp user-provided configuration to safe ranges.
