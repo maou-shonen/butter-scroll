@@ -6,6 +6,7 @@ mod hook;
 mod injector;
 mod keyboard_hook;
 mod pulse;
+mod threshold;
 mod traits;
 mod tray;
 mod util;
