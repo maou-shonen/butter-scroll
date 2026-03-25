@@ -3,11 +3,17 @@ name: Build
 on:
   push:
     branches: [main, master]
+    tags:
+      - 'v*'
   pull_request:
     branches: [main, master]
 
 env:
   CARGO_TERM_COLOR: always
+
+# Permissions for release job
+permissions:
+  contents: write
 
 jobs:
   # Linux 測試與檢查
