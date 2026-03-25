@@ -55,8 +55,8 @@ pub struct OutputConfig {
     /// Minimum accumulated delta before injecting a wheel event.
     /// Lower = smoother, higher = more compatible with legacy apps.
     /// 120 = WHEEL_DELTA (most compatible, chunkiest)
-    /// 40 = WHEEL_DELTA/3 (good balance, default)
-    /// 1 = per-frame (smoothest, modern apps only)
+    /// 40 = WHEEL_DELTA/3 (good balance)
+    /// 1 = per-frame (default; smoothest, modern apps only)
     pub inject_threshold: f64,
     /// Per-app threshold overrides keyed by executable path.
     #[serde(default)]
@@ -229,7 +229,7 @@ impl Default for AccelerationConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            inject_threshold: 40.0,
+            inject_threshold: 1.0,
             app_overrides: HashMap::new(),
         }
     }
@@ -327,7 +327,7 @@ mod tests {
         assert!(!cfg.scroll.inverted);
         assert_eq!(cfg.acceleration.delta_ms, 50);
         assert!((cfg.acceleration.max - 3.0).abs() < f64::EPSILON);
-        assert!((cfg.output.inject_threshold - 40.0).abs() < f64::EPSILON);
+        assert!((cfg.output.inject_threshold - 1.0).abs() < f64::EPSILON);
         assert!(cfg.general.enabled);
         assert!(!cfg.general.autostart);
     }
@@ -387,7 +387,7 @@ step_size = 2.5
         assert_eq!(cfg.scroll.pulse_normalize, 1.0);
         assert_eq!(cfg.acceleration.delta_ms, 1);
         assert_eq!(cfg.acceleration.max, 1.0);
-        assert_eq!(cfg.output.inject_threshold, 40.0);
+        assert_eq!(cfg.output.inject_threshold, 1.0);
     }
 
     #[test]

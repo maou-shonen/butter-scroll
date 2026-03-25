@@ -407,6 +407,10 @@ impl ScrollEngine {
                 // Resolve new PIDs to AppKey and apply user overrides
                 if target_pid != 0 && !self.pid_to_key.contains_key(&target_pid) {
                     if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
+                        eprintln!(
+                            "[threshold] new app: {:?} (pid={}), status=Unknown",
+                            &app_key.exe_path, target_pid
+                        );
                         // Check for user override first — bypasses detection
                         let override_val = self
                             .config
@@ -423,6 +427,10 @@ impl ScrollEngine {
                             if let Ok(mut cache) = self.threshold_cache.lock() {
                                 cache.set_mode(app_key.clone(), mode);
                             }
+                            eprintln!(
+                                "[threshold] override: {:?} → threshold={:.0}",
+                                &app_key.exe_path, val
+                            );
                         }
                         self.pid_to_key.insert(target_pid, app_key);
                     }
@@ -438,6 +446,7 @@ impl ScrollEngine {
                     };
 
                     if should_detect {
+                        eprintln!("[threshold] detecting: {:?}", &app_key.exe_path);
                         let _ = self.detect_tx.send(DetectRequest {
                             hwnd: 0,
                             app_key,
@@ -465,6 +474,12 @@ impl ScrollEngine {
                 self.apply_config(*cfg);
             }
             EngineCommand::DetectResult { app_key, mode } => {
+                eprintln!(
+                    "[threshold] detected: {:?} → {:?} (threshold={:.0})",
+                    &app_key.exe_path,
+                    &mode,
+                    mode.threshold()
+                );
                 if let Ok(mut cache) = self.threshold_cache.lock() {
                     cache.set_mode(app_key, mode);
                 }
@@ -812,6 +827,7 @@ mod tests {
     #[test]
     fn flush_remainder_carries_over() {
         let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = 40.0;
 
         // Manually set pending below threshold — no injection.
         engine.pending_y = -30.0;

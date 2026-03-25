@@ -62,15 +62,19 @@ max = 3.0
 #
 #   120 = WHEEL_DELTA (most compatible, but visibly chunky — 
 #         only ~1 injection per notch with step_size=100)
-#    40 = WHEEL_DELTA/3 (recommended — smooth for most apps,
+#    40 = WHEEL_DELTA/3 (good balance — smoother for most apps,
 #         ~2–3 injections per notch)
-#     1 = inject every frame (smoothest possible, but some legacy
-#         Win32 apps may ignore sub-WHEEL_DELTA values)
+#     1 = inject every frame (default — maximum smoothness, but some
+#         legacy Win32 apps may ignore sub-WHEEL_DELTA values)
+#
+# Default to 1.0 so butter-scroll stays maximally smooth, and override
+# per app under [output.app_overrides] when a legacy app needs more.
 #
 # Range: 1–120
-inject_threshold = 40.0
+inject_threshold = 1.0
 
 # Optional per-app overrides for legacy or modern apps.
+# If one app needs a different threshold, override it here.
 # Keys are executable paths; values use the same 1–120 range.
 #
 # [output.app_overrides]
