@@ -35,6 +35,7 @@ pub struct ScrollEngine {
     queue: Vec<ScrollItem>,
     direction: (i8, i8),
     last_scroll_time: u64,
+    current_target_pid: u32,
 
     // Accumulator — collects animation output and injects once configured
     // threshold is reached.
@@ -59,6 +60,7 @@ impl ScrollEngine {
             queue: Vec::with_capacity(32),
             direction: (0, 0),
             last_scroll_time: 0,
+            current_target_pid: 0,
             pending_x: 0.0,
             pending_y: 0.0,
         }
@@ -347,7 +349,12 @@ impl ScrollEngine {
 
     fn handle_command(&mut self, cmd: EngineCommand) -> bool {
         match cmd {
-            EngineCommand::Scroll { delta, horizontal } => {
+            EngineCommand::Scroll {
+                delta,
+                horizontal,
+                target_pid,
+            } => {
+                self.current_target_pid = target_pid;
                 self.handle_scroll(delta, horizontal);
             }
             EngineCommand::ScrollRaw { delta_y } => {

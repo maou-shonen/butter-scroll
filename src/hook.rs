@@ -80,7 +80,14 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
                 info.mouseData
             );
             if let Some(tx) = ENGINE_TX.get() {
-                if tx.send(EngineCommand::Scroll { delta, horizontal }).is_ok() {
+                if tx
+                    .send(EngineCommand::Scroll {
+                        delta,
+                        horizontal,
+                        target_pid: 0,
+                    })
+                    .is_ok()
+                {
                     // Swallow original event only when enqueue succeeds; smoothed
                     // events will be re-injected by the engine.
                     return 1;
