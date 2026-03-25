@@ -10,9 +10,9 @@ use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetAncestor, GetWindowThreadProcessId, SetWindowsHookExW,
-    UnhookWindowsHookEx, WindowFromPoint, GA_ROOT, HC_ACTION, HHOOK, MSLLHOOKSTRUCT,
-    WH_MOUSE_LL, WM_MOUSEHWHEEL, WM_MOUSEWHEEL,
+    CallNextHookEx, GetAncestor, GetWindowThreadProcessId, SetWindowsHookExW, UnhookWindowsHookEx,
+    WindowFromPoint, GA_ROOT, HC_ACTION, HHOOK, MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_MOUSEHWHEEL,
+    WM_MOUSEWHEEL,
 };
 
 #[cfg(target_os = "windows")]

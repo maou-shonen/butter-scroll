@@ -1,0 +1,2 @@
+Verified sanitize() clamps output.app_overrides values into the 1.0..=120.0 range.
+Observed high values reduced to 120.0 and low values raised to 1.0.

@@ -1,0 +1,2 @@
+Verified config parsing for [output.app_overrides] with TOML keys containing Windows paths.
+Expected values were loaded into HashMap<String, f64> without affecting other output defaults.

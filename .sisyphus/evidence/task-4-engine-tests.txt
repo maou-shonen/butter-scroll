@@ -1,0 +1,265 @@
+   Compiling butter-scroll v0.2.0-pre.3 (/home/shonen/butter-scroll/.worktree/adaptive-threshold)
+warning: enum `AppCommand` is never used
+ --> src/app.rs:2:10
+  |
+2 | pub enum AppCommand {
+  |          ^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: trait `AutoStartService` is never used
+ --> src/autostart.rs:1:11
+  |
+1 | pub trait AutoStartService: Send + Sync {
+  |           ^^^^^^^^^^^^^^^^
+
+warning: struct `WindowsAutoStart` is never constructed
+   --> src/autostart.rs:112:12
+    |
+112 | pub struct WindowsAutoStart;
+    |            ^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> src/autostart.rs:116:12
+    |
+115 | impl WindowsAutoStart {
+    | --------------------- associated function in this implementation
+116 |     pub fn new(_app_name: impl Into<String>) -> Result<Self, String> {
+    |            ^^^
+
+warning: trait `ConfigStore` is never used
+   --> src/config.rs:252:11
+    |
+252 | pub trait ConfigStore: Send + Sync {
+    |           ^^^^^^^^^^^
+
+warning: struct `FileConfigStore` is never constructed
+   --> src/config.rs:259:12
+    |
+259 | pub struct FileConfigStore {
+    |            ^^^^^^^^^^^^^^^
+
+warning: associated functions `new` and `default_path` are never used
+   --> src/config.rs:264:12
+    |
+263 | impl FileConfigStore {
+    | -------------------- associated functions in this implementation
+264 |     pub fn new(path: PathBuf) -> Self {
+    |            ^^^
+...
+269 |     pub fn default_path() -> PathBuf {
+    |            ^^^^^^^^^^^^
+
+warning: field `rx` is never read
+  --> src/engine.rs:28:5
+   |
+24 | pub struct ScrollEngine {
+   |            ------------ field in this struct
+...
+28 |     rx: Receiver<EngineCommand>,
+   |     ^^
+
+warning: methods `run` and `drain_commands` are never used
+   --> src/engine.rs:72:12
+    |
+ 46 | impl ScrollEngine {
+    | ----------------- methods in this implementation
+...
+ 72 |     pub fn run(&mut self) {
+    |            ^^^
+...
+341 |     fn drain_commands(&mut self) -> bool {
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `MouseHook` is never constructed
+   --> src/hook.rs:107:12
+    |
+107 | pub struct MouseHook;
+    |            ^^^^^^^^^
+
+warning: associated function `install` is never used
+   --> src/hook.rs:111:12
+    |
+110 | impl MouseHook {
+    | -------------- associated function in this implementation
+111 |     pub fn install(_tx: Sender<EngineCommand>) -> Result<Self, String> {
+    |            ^^^^^^^
+
+warning: struct `WindowsScrollOutput` is never constructed
+  --> src/injector.rs:88:12
+   |
+88 | pub struct WindowsScrollOutput;
+   |            ^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> src/injector.rs:92:12
+   |
+91 | impl WindowsScrollOutput {
+   | ------------------------ associated function in this implementation
+92 |     pub fn new() -> Self {
+   |            ^^^
+
+warning: constant `WHEEL_DELTA` is never used
+ --> src/keyboard_hook.rs:9:7
+  |
+9 | const WHEEL_DELTA: i16 = 120;
+  |       ^^^^^^^^^^^
+
+warning: constant `NOTCHES_LINE` is never used
+  --> src/keyboard_hook.rs:12:7
+   |
+12 | const NOTCHES_LINE: i16 = 1;
+   |       ^^^^^^^^^^^^
+
+warning: constant `PAGE_LINES` is never used
+  --> src/keyboard_hook.rs:20:7
+   |
+20 | const PAGE_LINES: f64 = 28.0;
+   |       ^^^^^^^^^^
+
+warning: enum `KeyGroup` is never used
+  --> src/keyboard_hook.rs:27:6
+   |
+27 | enum KeyGroup {
+   |      ^^^^^^^^
+
+warning: enum `KeyIntent` is never used
+  --> src/keyboard_hook.rs:34:6
+   |
+34 | enum KeyIntent {
+   |      ^^^^^^^^^
+
+warning: struct `KeyboardHook` is never constructed
+   --> src/keyboard_hook.rs:361:16
+    |
+361 |     pub struct KeyboardHook;
+    |                ^^^^^^^^^^^^
+
+warning: associated functions `install` and `update_config` are never used
+   --> src/keyboard_hook.rs:364:16
+    |
+363 |     impl KeyboardHook {
+    |     ----------------- associated functions in this implementation
+364 |         pub fn install(
+    |                ^^^^^^^
+...
+371 |         pub fn update_config(_config: &KeyboardConfig) {}
+    |                ^^^^^^^^^^^^^
+
+warning: variants `Scroll`, `ScrollRaw`, `Reload`, and `Stop` are never constructed
+  --> src/traits.rs:26:5
+   |
+24 | pub enum EngineCommand {
+   |          ------------- variants in this enum
+25 |     /// New scroll event from the mouse hook.
+26 |     Scroll {
+   |     ^^^^^^
+...
+35 |     ScrollRaw { delta_y: f64 },
+   |     ^^^^^^^^^
+...
+39 |     Reload(Box<Config>),
+   |     ^^^^^^
+40 |     /// Shut down the engine thread.
+41 |     Stop,
+   |     ^^^^
+
+warning: struct `SystemClock` is never constructed
+  --> src/traits.rs:49:12
+   |
+49 | pub struct SystemClock {
+   |            ^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> src/traits.rs:54:12
+   |
+53 | impl SystemClock {
+   | ---------------- associated function in this implementation
+54 |     pub fn new() -> Self {
+   |            ^^^
+
+warning: method `advance` is never used
+  --> src/traits.rs:89:12
+   |
+78 | impl MockTime {
+   | ------------- method in this implementation
+...
+89 |     pub fn advance(&self, delta: u64) {
+   |            ^^^^^^^
+
+warning: method `total` is never used
+   --> src/traits.rs:119:12
+    |
+108 | impl MockOutput {
+    | --------------- method in this implementation
+...
+119 |     pub fn total(&self) -> (i64, i64) {
+    |            ^^^^^
+
+warning: struct `TrayIcon` is never constructed
+   --> src/tray.rs:274:12
+    |
+274 | pub struct TrayIcon;
+    |            ^^^^^^^^
+
+warning: associated function `create` is never used
+   --> src/tray.rs:278:12
+    |
+277 | impl TrayIcon {
+    | ------------- associated function in this implementation
+278 |     pub fn create(_app_tx: Sender<AppCommand>) -> Result<Self, String> {
+    |            ^^^^^^
+
+warning: `butter-scroll` (bin "butter-scroll" test) generated 27 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.49s
+     Running unittests src/main.rs (target/debug/deps/butter_scroll-5de94d7b2fb88c57)
+
+running 45 tests
+test config::tests::config_default_has_empty_overrides ... ok
+test config::tests::config_sanitizes_override_values ... ok
+test config::tests::defaults ... ok
+test config::tests::keyboard_defaults ... ok
+test config::tests::keyboard_absent_section_uses_defaults ... ok
+test config::tests::keyboard_effective_mode_inherits ... ok
+test config::tests::config_parses_app_overrides ... ok
+test config::tests::keyboard_effective_mode_override ... ok
+test config::tests::keyboard_toml_minimal ... ok
+test config::tests::partial_toml_fills_defaults ... ok
+test config::tests::sanitize_rejects_invalid_values ... ok
+test config::tests::keyboard_toml_full ... ok
+test engine::tests::acceleration_resets_outside_window ... ok
+test engine::tests::acceleration_increases_delta ... ok
+test config::tests::sanitize_clamps_ranges ... ok
+test engine::tests::direction_change_clears_queue ... ok
+test engine::tests::disable_clears_inflight_queue ... ok
+test engine::tests::disable_resets_all_state ... ok
+test engine::tests::disabled_passes_through_raw ... ok
+test engine::tests::flush_handles_float_epsilon ... ok
+test engine::tests::direction_change_clears_pending ... ok
+test engine::tests::flush_remainder_carries_across_frames_with_threshold_120 ... ok
+test engine::tests::flush_remainder_carries_over ... ok
+test engine::tests::flush_injects_at_threshold ... ok
+test engine::tests::inverted_direction ... ok
+test engine::tests::flush_threshold_120_produces_single_wheel_delta_injection ... ok
+test config::tests::keyboard_toml_round_trip ... ok
+test engine::tests::multiple_scrolls_accumulate ... ok
+test engine::tests::single_scroll_total_delta ... ok
+test config::tests::round_trip_toml ... ok
+test engine::tests::reload_clears_inflight_queue ... ok
+test pulse::tests::boundaries ... ok
+test engine::tests::touchpad_threshold_behavior ... ok
+test pulse::tests::monotonically_increasing ... ok
+test engine::tests::zero_elapsed_uses_max_acceleration ... ok
+test pulse::tests::values_match_js_reference ... ok
+test pulse::tests::different_scales ... ok
+test pulse::tests::midpoint_ease_out_behaviour ... ok
+test threshold::tests::detecting_uses_default_threshold ... ok
+test threshold::tests::legacy_app_returns_120 ... ok
+test threshold::tests::lookup_override_returns_none_stub ... ok
+test threshold::tests::smooth_app_returns_1 ... ok
+test threshold::tests::start_detecting_prevents_duplicate ... ok
+test threshold::tests::threshold_mode_values ... ok
+test threshold::tests::unknown_app_returns_default ... ok
+
+test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

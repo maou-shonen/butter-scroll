@@ -453,7 +453,10 @@ inject_threshold = 40.0
 
         cfg.sanitize();
 
-        assert_eq!(cfg.output.app_overrides.get("high.exe").copied(), Some(120.0));
+        assert_eq!(
+            cfg.output.app_overrides.get("high.exe").copied(),
+            Some(120.0)
+        );
         assert_eq!(cfg.output.app_overrides.get("low.exe").copied(), Some(1.0));
     }
 

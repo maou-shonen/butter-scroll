@@ -520,7 +520,15 @@ mod tests {
         });
         let config = Config::default();
         let (tx, rx) = crossbeam_channel::unbounded();
-        let engine = ScrollEngine::new(time.clone(), output.clone(), resolver, detector, config, tx, rx);
+        let engine = ScrollEngine::new(
+            time.clone(),
+            output.clone(),
+            resolver,
+            detector,
+            config,
+            tx,
+            rx,
+        );
         (engine, time, output)
     }
 
@@ -953,7 +961,10 @@ mod tests {
 
         engine.pending_y = -100.0;
         engine.flush_pending();
-        assert!(output.drain().is_empty(), "legacy threshold=120 should not flush at 100");
+        assert!(
+            output.drain().is_empty(),
+            "legacy threshold=120 should not flush at 100"
+        );
 
         engine.pending_y = -120.0;
         engine.flush_pending();
@@ -991,7 +1002,10 @@ mod tests {
 
         engine.pending_y = -39.0;
         engine.flush_pending();
-        assert!(output.drain().is_empty(), "should honor global threshold without pid mapping");
+        assert!(
+            output.drain().is_empty(),
+            "should honor global threshold without pid mapping"
+        );
 
         engine.pending_y = -40.0;
         engine.flush_pending();

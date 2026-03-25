@@ -1,0 +1,10 @@
+test threshold::tests::threshold_mode_values ... ok
+test threshold::tests::unknown_app_returns_default ... ok
+test threshold::tests::cache_handles_missing_file ... ok
+test threshold::tests::cache_skips_stale_entries ... ok
+test threshold::tests::cache_skips_unknown_on_save ... ok
+test threshold::tests::cache_save_load_round_trip ... ok
+test engine::tests::detection_triggers_for_unknown_app ... ok
+
+test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

@@ -1,0 +1,364 @@
+warning: enum `AppCommand` is never used
+ --> src/app.rs:2:10
+  |
+2 | pub enum AppCommand {
+  |          ^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: trait `AutoStartService` is never used
+ --> src/autostart.rs:1:11
+  |
+1 | pub trait AutoStartService: Send + Sync {
+  |           ^^^^^^^^^^^^^^^^
+
+warning: struct `WindowsAutoStart` is never constructed
+   --> src/autostart.rs:112:12
+    |
+112 | pub struct WindowsAutoStart;
+    |            ^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> src/autostart.rs:116:12
+    |
+115 | impl WindowsAutoStart {
+    | --------------------- associated function in this implementation
+116 |     pub fn new(_app_name: impl Into<String>) -> Result<Self, String> {
+    |            ^^^
+
+warning: struct `Config` is never constructed
+  --> src/config.rs:13:12
+   |
+13 | pub struct Config {
+   |            ^^^^^^
+
+warning: struct `ScrollConfig` is never constructed
+  --> src/config.rs:24:12
+   |
+24 | pub struct ScrollConfig {
+   |            ^^^^^^^^^^^^
+
+warning: struct `AccelerationConfig` is never constructed
+  --> src/config.rs:44:12
+   |
+44 | pub struct AccelerationConfig {
+   |            ^^^^^^^^^^^^^^^^^^
+
+warning: struct `OutputConfig` is never constructed
+  --> src/config.rs:54:12
+   |
+54 | pub struct OutputConfig {
+   |            ^^^^^^^^^^^^
+
+warning: struct `GeneralConfig` is never constructed
+  --> src/config.rs:69:12
+   |
+69 | pub struct GeneralConfig {
+   |            ^^^^^^^^^^^^^
+
+warning: enum `KeyboardMode` is never used
+  --> src/config.rs:83:10
+   |
+83 | pub enum KeyboardMode {
+   |          ^^^^^^^^^^^^
+
+warning: struct `KeyGroupConfig` is never constructed
+  --> src/config.rs:97:12
+   |
+97 | pub struct KeyGroupConfig {
+   |            ^^^^^^^^^^^^^^
+
+warning: struct `KeyboardConfig` is never constructed
+   --> src/config.rs:108:12
+    |
+108 | pub struct KeyboardConfig {
+    |            ^^^^^^^^^^^^^^
+
+warning: method `effective_mode` is never used
+   --> src/config.rs:124:12
+    |
+121 | impl KeyboardConfig {
+    | ------------------- method in this implementation
+...
+124 |     pub fn effective_mode(&self, group: &KeyGroupConfig) -> KeyboardMode {
+    |            ^^^^^^^^^^^^^^
+
+warning: method `sanitize` is never used
+   --> src/config.rs:157:12
+    |
+152 | impl Config {
+    | ----------- method in this implementation
+...
+157 |     pub fn sanitize(&mut self) {
+    |            ^^^^^^^^
+
+warning: trait `ConfigStore` is never used
+   --> src/config.rs:252:11
+    |
+252 | pub trait ConfigStore: Send + Sync {
+    |           ^^^^^^^^^^^
+
+warning: struct `FileConfigStore` is never constructed
+   --> src/config.rs:259:12
+    |
+259 | pub struct FileConfigStore {
+    |            ^^^^^^^^^^^^^^^
+
+warning: associated functions `new` and `default_path` are never used
+   --> src/config.rs:264:12
+    |
+263 | impl FileConfigStore {
+    | -------------------- associated functions in this implementation
+264 |     pub fn new(path: PathBuf) -> Self {
+    |            ^^^
+...
+269 |     pub fn default_path() -> PathBuf {
+    |            ^^^^^^^^^^^^
+
+warning: struct `ScrollItem` is never constructed
+  --> src/engine.rs:12:8
+   |
+12 | struct ScrollItem {
+   |        ^^^^^^^^^^
+
+warning: struct `ScrollEngine` is never constructed
+  --> src/engine.rs:24:12
+   |
+24 | pub struct ScrollEngine {
+   |            ^^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> src/engine.rs:47:12
+    |
+ 46 | impl ScrollEngine {
+    | ----------------- associated items in this implementation
+ 47 |     pub fn new(
+    |            ^^^
+...
+ 72 |     pub fn run(&mut self) {
+    |            ^^^
+...
+114 |     pub(crate) fn handle_scroll(&mut self, delta: i16, horizontal: bool) {
+    |                   ^^^^^^^^^^^^^
+...
+155 |     pub(crate) fn handle_scroll_raw(&mut self, delta_y: f64) {
+    |                   ^^^^^^^^^^^^^^^^^
+...
+173 |     pub(crate) fn on_scroll(&mut self, x: f64, y: f64) {
+    |                   ^^^^^^^^^
+...
+190 |     pub(crate) fn tick(&mut self) -> (i32, i32) {
+    |                   ^^^^
+...
+229 |     pub(crate) fn flush_pending(&mut self) {
+    |                   ^^^^^^^^^^^^^
+...
+264 |     fn direction_check(&mut self, x: f64, y: f64) {
+    |        ^^^^^^^^^^^^^^^
+...
+295 |     fn apply_acceleration(&mut self, mut x: f64, mut y: f64) -> (f64, f64) {
+    |        ^^^^^^^^^^^^^^^^^^
+...
+329 |     fn apply_config(&mut self, config: Config) {
+    |        ^^^^^^^^^^^^
+...
+341 |     fn drain_commands(&mut self) -> bool {
+    |        ^^^^^^^^^^^^^^
+...
+350 |     fn handle_command(&mut self, cmd: EngineCommand) -> bool {
+    |        ^^^^^^^^^^^^^^
+
+warning: struct `MouseHook` is never constructed
+   --> src/hook.rs:116:12
+    |
+116 | pub struct MouseHook;
+    |            ^^^^^^^^^
+
+warning: associated function `install` is never used
+   --> src/hook.rs:120:12
+    |
+119 | impl MouseHook {
+    | -------------- associated function in this implementation
+120 |     pub fn install(_tx: Sender<EngineCommand>) -> Result<Self, String> {
+    |            ^^^^^^^
+
+warning: struct `WindowsScrollOutput` is never constructed
+  --> src/injector.rs:88:12
+   |
+88 | pub struct WindowsScrollOutput;
+   |            ^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> src/injector.rs:92:12
+   |
+91 | impl WindowsScrollOutput {
+   | ------------------------ associated function in this implementation
+92 |     pub fn new() -> Self {
+   |            ^^^
+
+warning: constant `WHEEL_DELTA` is never used
+ --> src/keyboard_hook.rs:9:7
+  |
+9 | const WHEEL_DELTA: i16 = 120;
+  |       ^^^^^^^^^^^
+
+warning: constant `NOTCHES_LINE` is never used
+  --> src/keyboard_hook.rs:12:7
+   |
+12 | const NOTCHES_LINE: i16 = 1;
+   |       ^^^^^^^^^^^^
+
+warning: constant `PAGE_LINES` is never used
+  --> src/keyboard_hook.rs:20:7
+   |
+20 | const PAGE_LINES: f64 = 28.0;
+   |       ^^^^^^^^^^
+
+warning: enum `KeyGroup` is never used
+  --> src/keyboard_hook.rs:27:6
+   |
+27 | enum KeyGroup {
+   |      ^^^^^^^^
+
+warning: enum `KeyIntent` is never used
+  --> src/keyboard_hook.rs:34:6
+   |
+34 | enum KeyIntent {
+   |      ^^^^^^^^^
+
+warning: struct `KeyboardHook` is never constructed
+   --> src/keyboard_hook.rs:361:16
+    |
+361 |     pub struct KeyboardHook;
+    |                ^^^^^^^^^^^^
+
+warning: associated functions `install` and `update_config` are never used
+   --> src/keyboard_hook.rs:364:16
+    |
+363 |     impl KeyboardHook {
+    |     ----------------- associated functions in this implementation
+364 |         pub fn install(
+    |                ^^^^^^^
+...
+371 |         pub fn update_config(_config: &KeyboardConfig) {}
+    |                ^^^^^^^^^^^^^
+
+warning: struct `Pulse` is never constructed
+  --> src/pulse.rs:13:12
+   |
+13 | pub struct Pulse {
+   |            ^^^^^
+
+warning: associated items `new`, `apply`, and `raw` are never used
+  --> src/pulse.rs:20:12
+   |
+18 | impl Pulse {
+   | ---------- associated items in this implementation
+19 |     /// Create a new pulse with the given `scale` and normalization hint.
+20 |     pub fn new(scale: f64, normalize_hint: f64) -> Self {
+   |            ^^^
+...
+30 |     pub fn apply(&self, t: f64) -> f64 {
+   |            ^^^^^
+...
+41 |     fn raw(t: f64, scale: f64, normalize: f64) -> f64 {
+   |        ^^^
+
+warning: enum `ThresholdMode` is never used
+  --> src/threshold.rs:10:10
+   |
+10 | pub enum ThresholdMode {
+   |          ^^^^^^^^^^^^^
+
+warning: method `threshold` is never used
+  --> src/threshold.rs:23:12
+   |
+21 | impl ThresholdMode {
+   | ------------------ method in this implementation
+22 |     /// The `inject_threshold` value implied by this mode.
+23 |     pub fn threshold(&self) -> f64 {
+   |            ^^^^^^^^^
+
+warning: struct `AppKey` is never constructed
+  --> src/threshold.rs:36:12
+   |
+36 | pub struct AppKey {
+   |            ^^^^^^
+
+warning: struct `AppThresholdCache` is never constructed
+  --> src/threshold.rs:49:12
+   |
+49 | pub struct AppThresholdCache {
+   |            ^^^^^^^^^^^^^^^^^
+
+warning: associated items `new`, `get_threshold`, `set_mode`, `start_detecting`, `get_mode`, and `lookup_override` are never used
+  --> src/threshold.rs:54:12
+   |
+53 | impl AppThresholdCache {
+   | ---------------------- associated items in this implementation
+54 |     pub fn new() -> Self {
+   |            ^^^
+...
+64 |     pub fn get_threshold(&self, app_key: Option<&AppKey>) -> f64 {
+   |            ^^^^^^^^^^^^^
+...
+72 |     pub fn set_mode(&mut self, app_key: AppKey, mode: ThresholdMode) {
+   |            ^^^^^^^^
+...
+79 |     pub fn start_detecting(&mut self, app_key: AppKey) -> bool {
+   |            ^^^^^^^^^^^^^^^
+...
+90 |     pub fn get_mode(&self, app_key: &AppKey) -> Option<&ThresholdMode> {
+   |            ^^^^^^^^
+...
+97 |     pub fn lookup_override(&self, _exe_path: &str) -> Option<f64> {
+   |            ^^^^^^^^^^^^^^^
+
+warning: trait `TimeSource` is never used
+  --> src/traits.rs:11:11
+   |
+11 | pub trait TimeSource: Send + Sync {
+   |           ^^^^^^^^^^
+
+warning: trait `ScrollOutput` is never used
+  --> src/traits.rs:16:11
+   |
+16 | pub trait ScrollOutput: Send + Sync {
+   |           ^^^^^^^^^^^^
+
+warning: enum `EngineCommand` is never used
+  --> src/traits.rs:24:10
+   |
+24 | pub enum EngineCommand {
+   |          ^^^^^^^^^^^^^
+
+warning: struct `SystemClock` is never constructed
+  --> src/traits.rs:49:12
+   |
+49 | pub struct SystemClock {
+   |            ^^^^^^^^^^^
+
+warning: associated function `new` is never used
+  --> src/traits.rs:54:12
+   |
+53 | impl SystemClock {
+   | ---------------- associated function in this implementation
+54 |     pub fn new() -> Self {
+   |            ^^^
+
+warning: struct `TrayIcon` is never constructed
+   --> src/tray.rs:274:12
+    |
+274 | pub struct TrayIcon;
+    |            ^^^^^^^^
+
+warning: associated function `create` is never used
+   --> src/tray.rs:278:12
+    |
+277 | impl TrayIcon {
+    | ------------- associated function in this implementation
+278 |     pub fn create(_app_tx: Sender<AppCommand>) -> Result<Self, String> {
+    |            ^^^^^^
+
+warning: `butter-scroll` (bin "butter-scroll") generated 45 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s

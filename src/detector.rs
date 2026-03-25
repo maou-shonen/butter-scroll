@@ -65,7 +65,10 @@ mod tests {
             before_pos: None,
             after_pos: None,
         };
-        assert_eq!(detect_with_mock(&class_fail, 1, 1.0), ThresholdMode::Unknown);
+        assert_eq!(
+            detect_with_mock(&class_fail, 1, 1.0),
+            ThresholdMode::Unknown
+        );
 
         // scrollbar path but GetScrollInfo failed
         let scroll_fail = MockDetectionInput {
@@ -74,7 +77,9 @@ mod tests {
             before_pos: None,
             after_pos: None,
         };
-        assert_eq!(detect_with_mock(&scroll_fail, 1, 1.0), ThresholdMode::Unknown);
+        assert_eq!(
+            detect_with_mock(&scroll_fail, 1, 1.0),
+            ThresholdMode::Unknown
+        );
     }
-
 }

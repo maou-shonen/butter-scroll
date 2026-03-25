@@ -32,8 +32,9 @@ impl ProcessResolver for WindowsProcessResolver {
         // 2. Query the full executable path.
         let mut buf = [0u16; 1024];
         let mut len = buf.len() as u32;
-        let ok =
-            unsafe { QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len) };
+        let ok = unsafe {
+            QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len)
+        };
 
         // MUST close handle regardless of query result.
         unsafe { CloseHandle(handle) };
