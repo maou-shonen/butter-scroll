@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ScrollConfig } from "./types";
+  import { EASING_OPTIONS } from "./types";
 
   export let config: ScrollConfig;
 </script>
@@ -34,15 +35,17 @@
     <p class="hint">每個滾輪刻度的捲動距離（100 = 預設）</p>
   </div>
 
-  <div class="field toggle-field">
-    <label>
-      <span>使用 Pulse 緩動曲線</span>
-      <input type="checkbox" bind:checked={config.pulse_algorithm} />
-    </label>
-    <p class="hint">啟用後有「快啟慢停」的感覺</p>
+  <div class="field">
+    <label for="easing-select">緩動曲線</label>
+    <select id="easing-select" bind:value={config.easing}>
+      {#each EASING_OPTIONS as opt}
+        <option value={opt.value}>{opt.label}</option>
+      {/each}
+    </select>
+    <p class="hint">控制捲動動畫的加速與減速曲線（預覽功能）</p>
   </div>
 
-  {#if config.pulse_algorithm}
+  {#if config.easing === "pulse"}
     <div class="field">
       <label>
         <span>Pulse 強度</span>
@@ -112,6 +115,20 @@
   input[type="range"] {
     width: 100%;
     margin: 0.25rem 0;
+  }
+  select {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    background: #fff;
+    margin-top: 0.25rem;
+  }
+  select:focus {
+    outline: none;
+    border-color: #4a9eff;
+    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
   }
   .toggle-field label {
     cursor: pointer;
