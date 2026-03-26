@@ -1,6 +1,11 @@
 [tools]
 rust = "1.94.0"
 node = "lts"
+pnpm = "latest"
+lefthook = "latest"
+
+[hooks]
+postinstall = "lefthook install"
 
 [tasks]
 # 開發常用指令
