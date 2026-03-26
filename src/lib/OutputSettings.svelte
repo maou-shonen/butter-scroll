@@ -26,12 +26,13 @@
   let newThreshold = 40;
 
   function addOverride() {
-    if (newExePath.trim()) {
-      config.app_overrides[newExePath.trim()] = newThreshold;
-      config.app_overrides = { ...config.app_overrides }; // trigger reactivity
-      newExePath = "";
-      newThreshold = 40;
-    }
+    const path = newExePath.trim();
+    if (!path) return;
+    const clamped = Math.max(1, Math.min(120, Number.isFinite(newThreshold) ? newThreshold : 40));
+    config.app_overrides[path] = clamped;
+    config.app_overrides = { ...config.app_overrides }; // trigger reactivity
+    newExePath = "";
+    newThreshold = 40;
   }
 
   function removeOverride(key: string) {

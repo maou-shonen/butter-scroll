@@ -76,19 +76,31 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 "enabled" => {
                     let mut config = state.config_store.load();
                     config.general.enabled = !config.general.enabled;
-                    let _ = state.config_store.save(&config);
-                    let _ = state
+                    if let Err(e) = state.config_store.save(&config) {
+                        log::error!("[tray] failed to save config: {e}");
+                        return;
+                    }
+                    if let Err(e) = state
                         .engine_tx
-                        .send(EngineCommand::SetEnabled(config.general.enabled));
+                        .send(EngineCommand::SetEnabled(config.general.enabled))
+                    {
+                        log::error!("[tray] failed to send engine command: {e}");
+                    }
                 }
                 "keyboard" => {
                     let mut config = state.config_store.load();
                     config.keyboard.enabled = !config.keyboard.enabled;
-                    let _ = state.config_store.save(&config);
+                    if let Err(e) = state.config_store.save(&config) {
+                        log::error!("[tray] failed to save config: {e}");
+                        return;
+                    }
                     crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
-                    let _ = state
+                    if let Err(e) = state
                         .engine_tx
-                        .send(EngineCommand::Reload(Box::new(config)));
+                        .send(EngineCommand::Reload(Box::new(config)))
+                    {
+                        log::error!("[tray] failed to send engine command: {e}");
+                    }
                 }
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
@@ -99,15 +111,20 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 "autostart" => {
                     let autostart_manager = app.autolaunch();
                     let is_enabled = autostart_manager.is_enabled().unwrap_or(false);
-                    if is_enabled {
-                        let _ = autostart_manager.disable();
+                    let toggle_result = if is_enabled {
+                        autostart_manager.disable()
                     } else {
-                        let _ = autostart_manager.enable();
+                        autostart_manager.enable()
+                    };
+                    if let Err(e) = toggle_result {
+                        log::error!("[tray] failed to toggle autostart: {e}");
+                        return;
                     }
-                    // Sync new state to config file
                     let mut config = state.config_store.load();
                     config.general.autostart = !is_enabled;
-                    let _ = state.config_store.save(&config);
+                    if let Err(e) = state.config_store.save(&config) {
+                        log::error!("[tray] failed to save config: {e}");
+                    }
                 }
                 "exit" => {
                     app.exit(0);

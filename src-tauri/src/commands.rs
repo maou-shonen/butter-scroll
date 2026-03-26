@@ -80,10 +80,20 @@ pub fn toggle_autostart(state: State<AppState>, app: AppHandle) -> Result<bool, 
         autostart_manager.enable().map_err(|e| e.to_string())?;
     }
 
+    let new_state = !is_currently_enabled;
+
     let mut config = state.config_store.load();
-    config.general.autostart = !is_currently_enabled;
-    state.config_store.save(&config)?;
-    Ok(config.general.autostart)
+    config.general.autostart = new_state;
+    if let Err(e) = state.config_store.save(&config) {
+        // Rollback OS autostart state on config save failure
+        if new_state {
+            let _ = autostart_manager.disable();
+        } else {
+            let _ = autostart_manager.enable();
+        }
+        return Err(e);
+    }
+    Ok(new_state)
 }
 
 /// Returns current app status for UI initialization.
