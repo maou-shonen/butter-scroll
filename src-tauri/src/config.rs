@@ -1,3 +1,4 @@
+use crate::easing::EasingType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -28,11 +29,24 @@ pub struct ScrollConfig {
     pub animation_time: u32,
     /// Scroll amount per wheel notch (default: 100.0).
     pub step_size: f64,
-    /// Enable pulse easing algorithm (default: true)
-    pub pulse_algorithm: bool,
-    /// Pulse intensity scaling (default: 4)
+    /// Easing algorithm for scroll animation (default: pulse).
+    ///
+    /// Available: "linear", "pulse", "out_cubic", "out_quint",
+    /// "out_expo", "out_circ", "out_back".
+    ///
+    /// Also accepts legacy `pulse_algorithm = true/false` (mapped to
+    /// pulse / linear for backward compatibility).
+    #[serde(
+        default = "EasingType::default",
+        alias = "pulse_algorithm",
+        deserialize_with = "deserialize_easing"
+    )]
+    pub easing: EasingType,
+    /// Pulse intensity scaling (default: 4).
+    /// Only used when easing = "pulse".
     pub pulse_scale: f64,
-    /// Pulse normalization hint (default: 1)
+    /// Pulse normalization hint (default: 1).
+    /// Only used when easing = "pulse".
     pub pulse_normalize: f64,
     /// Invert scroll direction (default: false)
     pub inverted: bool,
@@ -214,6 +228,67 @@ impl Default for KeyboardConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Backward-compatible deserialization: accepts both
+//   easing = "out_cubic"        (new format)
+//   pulse_algorithm = true      (legacy boolean → pulse / linear)
+// ---------------------------------------------------------------------------
+
+fn deserialize_easing<'de, D>(deserializer: D) -> Result<EasingType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    struct EasingVisitor;
+
+    impl<'de> de::Visitor<'de> for EasingVisitor {
+        type Value = EasingType;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(
+                f,
+                r#"an easing name ("pulse", "out_cubic", …) or a boolean (legacy)"#
+            )
+        }
+
+        fn visit_bool<E: de::Error>(self, v: bool) -> Result<Self::Value, E> {
+            // Legacy: pulse_algorithm = true → Pulse, false → Linear
+            Ok(if v {
+                EasingType::Pulse
+            } else {
+                EasingType::Linear
+            })
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            match v {
+                "linear" => Ok(EasingType::Linear),
+                "pulse" => Ok(EasingType::Pulse),
+                "out_cubic" => Ok(EasingType::OutCubic),
+                "out_quint" => Ok(EasingType::OutQuint),
+                "out_expo" => Ok(EasingType::OutExpo),
+                "out_circ" => Ok(EasingType::OutCirc),
+                "out_back" => Ok(EasingType::OutBack),
+                _ => Err(de::Error::unknown_variant(
+                    v,
+                    &[
+                        "linear",
+                        "pulse",
+                        "out_cubic",
+                        "out_quint",
+                        "out_expo",
+                        "out_circ",
+                        "out_back",
+                    ],
+                )),
+            }
+        }
+    }
+
+    deserializer.deserialize_any(EasingVisitor)
+}
+
+// ---------------------------------------------------------------------------
 // Config methods
 // ---------------------------------------------------------------------------
 
@@ -279,7 +354,7 @@ impl Default for ScrollConfig {
             frame_rate: 150,
             animation_time: 400,
             step_size: 100.0,
-            pulse_algorithm: true,
+            easing: EasingType::default(),
             pulse_scale: 4.0,
             pulse_normalize: 1.0,
             inverted: false,
@@ -391,7 +466,7 @@ mod tests {
         assert_eq!(cfg.scroll.frame_rate, 150);
         assert_eq!(cfg.scroll.animation_time, 400);
         assert!((cfg.scroll.step_size - 100.0).abs() < f64::EPSILON);
-        assert!(cfg.scroll.pulse_algorithm);
+        assert_eq!(cfg.scroll.easing, EasingType::Pulse);
         assert!((cfg.scroll.pulse_scale - 4.0).abs() < f64::EPSILON);
         assert!((cfg.scroll.pulse_normalize - 1.0).abs() < f64::EPSILON);
         assert!(!cfg.scroll.inverted);
@@ -431,7 +506,7 @@ step_size = 2.5
                 frame_rate: 0,
                 animation_time: 0,
                 step_size: f64::NAN,
-                pulse_algorithm: true,
+                easing: EasingType::Pulse,
                 pulse_scale: -10.0,
                 pulse_normalize: -1.0,
                 inverted: false,
@@ -688,5 +763,68 @@ step_size = 50.0
         assert!(cfg.keyboard.enabled);
         assert_eq!(cfg.keyboard.mode, KeyboardMode::Always);
         assert_eq!(cfg.keyboard.arrow_keys.mode, Some(KeyboardMode::Off));
+    }
+
+    // -- Easing backward compatibility --------------------------------------
+
+    #[test]
+    fn legacy_pulse_algorithm_true_maps_to_pulse() {
+        let text = r#"
+[scroll]
+pulse_algorithm = true
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.scroll.easing, EasingType::Pulse);
+    }
+
+    #[test]
+    fn legacy_pulse_algorithm_false_maps_to_linear() {
+        let text = r#"
+[scroll]
+pulse_algorithm = false
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.scroll.easing, EasingType::Linear);
+    }
+
+    #[test]
+    fn easing_parses_new_format() {
+        let text = r#"
+[scroll]
+easing = "out_cubic"
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.scroll.easing, EasingType::OutCubic);
+    }
+
+    #[test]
+    fn easing_default_is_pulse() {
+        let text = r#"
+[scroll]
+step_size = 50.0
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.scroll.easing, EasingType::Pulse);
+    }
+
+    #[test]
+    fn legacy_config_reserializes_with_easing_field() {
+        // Load from legacy format, re-serialize, verify output uses "easing" key.
+        let text = r#"
+[scroll]
+pulse_algorithm = true
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.scroll.easing, EasingType::Pulse);
+
+        let reserialized = toml::to_string_pretty(&cfg).unwrap();
+        assert!(
+            reserialized.contains("easing = \"pulse\""),
+            "re-serialized config should use 'easing' key, got:\n{reserialized}"
+        );
+        assert!(
+            !reserialized.contains("pulse_algorithm"),
+            "re-serialized config should not contain legacy 'pulse_algorithm' key"
+        );
     }
 }
