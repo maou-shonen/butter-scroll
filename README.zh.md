@@ -7,13 +7,13 @@
 
 如奶油般滑順的 Windows 滑鼠滾輪體驗。
 
-butter-scroll 是一個輕量的系統匣工具，在作業系統層級攔截滑鼠滾輪與鍵盤捲動事件，套用緩動動畫後重新注入平滑化的事件 — 讓每個應用程式的捲動都像奶油一樣滑順。
+butter-scroll 是一個輕量的系統匣工具，在作業系統層級攔截滑鼠滾輪與鍵盤捲動事件，套用脈衝緩動動畫後重新注入平滑化的事件 — 讓每個應用程式的捲動都像奶油一樣滑順。
 
 因為找不到免費且堪用的替代方案，所以自己做了一個。
 
 ## 功能
 
-- **平滑捲動** — 可選緩動曲線（Pulse、OutCubic、OutQuint、OutExpo、OutCirc、OutBack）取代預設的頓挫滾輪行為
+- **平滑捲動** — 脈衝緩動曲線（ease-out 手感）取代預設的頓挫滾輪行為
 - **鍵盤捲動** — 可選的 Page Up/Down、方向鍵、Space 平滑捲動
 - **加速度** — 快速連續滾動時自動加速
 - **逐應用自適應輸出** — 自動偵測每個應用程式最佳的注入閾值
@@ -37,7 +37,7 @@ butter-scroll 是一個輕量的系統匣工具，在作業系統層級攔截滑
 
 1. 執行安裝程式（或解壓縮可攜版 ZIP）— butter-scroll 會啟動在系統匣
 2. 右鍵點擊匣圖示 → **設定** 開啟設定面板
-3. 調整捲動手感（緩動曲線、動畫時間、步進大小）後點擊 **儲存設定**
+3. 調整捲動手感（動畫時間、步進大小、脈衝強度）後點擊 **儲存設定**
 4. 若要開機自動啟動，在「一般」設定中啟用 **開機自動啟動**
 
 設定檔位於 `%APPDATA%\com.butter-scroll.app\config.toml`。  
@@ -61,7 +61,7 @@ mise run build     # 建置 NSIS 安裝程式 + release exe
 
 ## 致謝
 
-預設捲動動畫算法（Pulse）基於 [@gblazex](https://github.com/gblazex) 的 [SmoothScroll](https://github.com/gblazex/smoothscroll) — 一個為瀏覽器帶來平滑捲動的 Chrome 擴充功能。butter-scroll 將其脈衝緩動曲線（Michael Herf 算法）移植到 Windows 系統層級，並提供多種標準 Penner 緩動函數作為替代選項。
+捲動動畫算法基於 [@gblazex](https://github.com/gblazex) 的 [SmoothScroll](https://github.com/gblazex/smoothscroll) — 一個為瀏覽器帶來平滑捲動的 Chrome 擴充功能。butter-scroll 將其脈衝緩動曲線（Michael Herf 算法）移植到 Windows 系統層級。
 
 ## 授權
 
