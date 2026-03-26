@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Run Rust tests
+        run: cd src-tauri && cargo test --lib
+
+      - name: Check formatting
+        run: cd src-tauri && cargo fmt --check
+
+      - name: Clippy
+        run: cd src-tauri && cargo clippy -- -D warnings
+
+  release:
+    name: Create Release
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "butter-scroll ${{ github.ref_name }}"
+          releaseBody: "See assets to download and install."
+          releaseDraft: true
+          prerelease: false
+
+      - name: Create portable ZIP
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "butter-scroll-portable"
+          New-Item -ItemType Directory -Path $dir
+          Copy-Item "src-tauri/target/release/butter-scroll.exe" "$dir/"
+          New-Item -ItemType File -Path "$dir/.portable" | Out-Null
+          Compress-Archive -Path "$dir/*" -DestinationPath "butter-scroll_${version}_x64-portable.zip"
+
+      - name: Upload portable ZIP to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.ref_name }} "butter-scroll_${{ github.ref_name }}_x64-portable.zip" --clobber

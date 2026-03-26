@@ -74,9 +74,11 @@ src/                        Frontend (Svelte 5 + TypeScript)
     KeyboardSettings.svelte
     GeneralSettings.svelte
 
-config.default.toml         Default configuration (embedded + reference)
-mise.toml                   Dev tooling tasks (dev, test, check, clippy, build)
-.github/workflows/build.yml CI/CD — test on Linux, build NSIS installer + portable ZIP on Windows
+config.default.toml           Default configuration (embedded + reference)
+mise.toml                     Dev tooling tasks (dev, test, check, clippy, build)
+.github/workflows/
+  ci.yml                      CI — test/lint (Linux) + build verification (Windows, main only)
+  release.yml                 Release — build + publish GitHub Release (v* tags only)
 ```
 
 ## Frameworks & Tools
@@ -113,6 +115,37 @@ mise run fmt       # cargo fmt
 mise run build     # Build NSIS installer + release exe
 mise run verify    # Build frontend + run tests
 ```
+
+## CI/CD
+
+### CI (`ci.yml`)
+
+Triggers: push to `main`, pull requests to `main`, manual dispatch.
+
+- **test** — Linux runner. Runs `cargo test --lib`, `cargo fmt --check`, `cargo clippy -- -D warnings`, and builds the Svelte frontend.
+- **build-windows** — Windows runner, main push only (skipped on PRs). Builds the NSIS installer + portable ZIP and uploads as artifacts for verification.
+
+### Release (`release.yml`)
+
+Triggers: push `v*` tags **only**.
+
+1. **test** — Same checks as CI (format, clippy, tests).
+2. **release** — Windows runner. Uses `tauri-apps/tauri-action` to build and create a draft GitHub Release with:
+   - NSIS installer (`*-setup.exe`) + update signature (`*.sig`)
+   - `latest.json` for auto-updater
+   - Portable ZIP (`*-portable.zip`) — uploaded separately via `gh release upload`
+
+### Release Flow
+
+```
+1. Update version in src-tauri/tauri.conf.json
+2. Commit, then push a version tag:
+   git tag v0.x.x && git push origin v0.x.x
+3. release.yml runs automatically → creates a **draft** release
+4. Review the draft on GitHub → publish when ready
+```
+
+Required secrets: `TAURI_SIGNING_PRIVATE_KEY` (update signature), `GITHUB_TOKEN` (auto-provided).
 
 ## Notes
 
