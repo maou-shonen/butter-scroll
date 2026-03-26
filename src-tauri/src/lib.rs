@@ -182,7 +182,7 @@ pub fn run() {
 
         let app_state = state::AppState {
             engine_tx: engine_tx.clone(),
-            config_store: Arc::clone(&config_store) as Arc<dyn crate::config::ConfigStore>,
+            config_store: Arc::clone(&config_store) as Arc<dyn ConfigStore>,
             threshold_cache: Arc::clone(&threshold_cache),
             portable,
         };

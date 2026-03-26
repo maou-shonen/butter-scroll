@@ -669,8 +669,10 @@ inject_threshold = 40
 
     #[test]
     fn keyboard_effective_mode_override() {
-        let mut cfg = KeyboardConfig::default();
-        cfg.mode = KeyboardMode::Win32Scrollbar;
+        let mut cfg = KeyboardConfig {
+            mode: KeyboardMode::Win32Scrollbar,
+            ..KeyboardConfig::default()
+        };
         // page_up_down inherits new parent mode.
         assert_eq!(
             cfg.effective_mode(&cfg.page_up_down),
