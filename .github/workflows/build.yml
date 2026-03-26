@@ -80,9 +80,6 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Build frontend
-        run: pnpm build
-
       - name: Build Tauri app (NSIS installer)
         run: pnpm tauri build
         env:

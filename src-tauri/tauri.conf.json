@@ -4,6 +4,8 @@
   "version": "0.2.0-pre.4",
   "identifier": "com.butter-scroll.app",
   "build": {
+    "beforeBuildCommand": "pnpm build",
+    "beforeDevCommand": "pnpm dev",
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173"
   },
