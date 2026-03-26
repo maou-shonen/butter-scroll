@@ -61,6 +61,8 @@ pub fn run() {
 
         use tauri::Manager;
 
+        use crate::config::ConfigStore;
+
         // Resolve config directory: prefer %APPDATA%\com.butter-scroll.app\
         // Fall back to exe-relative path for compatibility.
         // If new path doesn't exist but old exe-relative config does, migrate it.
