@@ -21,30 +21,18 @@ animation_time = 400
 # Range: 1–2000
 step_size = 100.0
 
-# Easing algorithm for scroll animation.
-# Controls the acceleration/deceleration curve during scrolling.
-#
-# Available options:
-#   "pulse"      — Michael Herf algorithm, designed for scrolling (default)
-#   "out_cubic"  — standard ease-out, reliable baseline
-#   "out_quint"  — snappier start, more aggressive deceleration
-#   "out_expo"   — very fast start, long tail (iOS-like inertia)
-#   "out_circ"   — circular ease-out, distinct feel from polynomial
-#   "out_back"   — slight overshoot (~10%) then settle (experimental)
-#   "linear"     — constant speed, no easing
-#
-# Legacy: `pulse_algorithm = true/false` is still accepted for backward
-# compatibility (mapped to "pulse" / "linear").
-easing = "pulse"
-
-# Pulse curve intensity (only used when easing = "pulse").
-# Higher values front-load more of the scroll into the early phase.
+# Pulse easing curve intensity (Michael Herf algorithm).
+# Controls the "fast start, gradual stop" feel.
+# Higher values front-load more scroll into the early phase of the
+# animation, making the deceleration tail more pronounced.
+# 4.0 = default; 2.0 = gentler; 8.0 = more aggressive.
 # Range: 0.1–20
 pulse_scale = 4.0
 
-# Pulse normalization factor (only used when easing = "pulse").
-# Leave at 1.0 for auto-normalization (ensures pulse(1.0) = 1.0).
-# Advanced: values > 1 amplify the curve.
+# Pulse normalization factor.
+# Controls the output amplitude of the easing curve.
+# 1.0 = auto-normalized (ensures the animation completes fully).
+# Usually no need to change unless fine-tuning pulse_scale effect.
 # Range: 0.1–10
 pulse_normalize = 1.0
 

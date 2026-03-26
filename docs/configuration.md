@@ -16,25 +16,12 @@ Below is a complete reference of all settings. Default values are shown inline.
 
 | Key | Default | Range | Description |
 |-----|---------|-------|-------------|
-| `frame_rate` | `150` | 30–1000 | Animation frame rate (Hz). Higher = smoother but more CPU |
-| `animation_time` | `400` | 1–5000 | Duration of one scroll animation (ms). Longer = more gradual deceleration |
-| `step_size` | `100.0` | 1–2000 | Scroll distance per wheel notch. 100 ≈ default 3-line scroll |
-| `easing` | `"pulse"` | see below | Easing algorithm for scroll animation. Legacy `pulse_algorithm = true/false` also accepted |
-| `pulse_scale` | `4.0` | 0.1–20 | Pulse intensity (only used when `easing = "pulse"`). Higher = more front-loaded scroll |
-| `pulse_normalize` | `1.0` | 0.1–10 | Pulse normalization factor (only used when `easing = "pulse"`). 1.0 = auto |
-| `inverted` | `false` | — | Invert scroll direction (natural / macOS-style) |
-
-### Easing Options
-
-| Value | Description |
-|-------|-------------|
-| `"pulse"` | Michael Herf algorithm — designed specifically for scrolling (default) |
-| `"out_cubic"` | Standard ease-out — reliable baseline |
-| `"out_quint"` | Snappier start, more aggressive deceleration |
-| `"out_expo"` | Very fast start, long tail — iOS-like inertia feel |
-| `"out_circ"` | Circular ease-out — geometrically distinct from polynomial |
-| `"out_back"` | Slight overshoot (~10%) then settle (experimental) |
-| `"linear"` | Constant speed, no easing |
+| `frame_rate` | `150` | 30–1000 | Animation updates per second (Hz). Higher = smoother animation but more CPU. 150 is a good balance; rarely needs changing |
+| `animation_time` | `400` | 1–5000 | Duration of one scroll animation (ms). Shorter (~200) = snappier response; longer (~600) = more gradual deceleration |
+| `step_size` | `100.0` | 1–2000 | Scroll distance per wheel notch. 100 ≈ Windows default 3-line scroll. Increase to cover more content per scroll |
+| `pulse_scale` | `4.0` | 0.1–20 | Pulse easing intensity — controls "fast start, gradual stop" strength. Higher = more scroll front-loaded into early animation. 2.0 = gentle, 4.0 = default, 8.0 = aggressive |
+| `pulse_normalize` | `1.0` | 0.1–10 | Pulse curve output amplitude. 1.0 = auto-normalized (animation completes fully). Usually no need to change |
+| `inverted` | `false` | — | Invert scroll direction — macOS-style "natural scrolling" where wheel-down moves content up |
 
 ## `[acceleration]` — Rapid Scroll Boost
 
@@ -112,7 +99,6 @@ Default: `mode = "off"`
 frame_rate = 150
 animation_time = 400
 step_size = 100.0
-easing = "pulse"
 pulse_scale = 4.0
 
 [acceleration]
