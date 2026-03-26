@@ -434,7 +434,9 @@ impl ScrollEngine {
                                 if fresh.exe_path != existing.exe_path {
                                     log::info!(
                                         "[threshold] PID {} recycled: {:?} → {:?}",
-                                        target_pid, existing.exe_path, fresh.exe_path
+                                        target_pid,
+                                        existing.exe_path,
+                                        fresh.exe_path
                                     );
                                     true
                                 } else {
@@ -450,7 +452,8 @@ impl ScrollEngine {
                         if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
                             log::info!(
                                 "[threshold] new app: {:?} (pid={}), status=Unknown",
-                                &app_key.exe_path, target_pid
+                                &app_key.exe_path,
+                                target_pid
                             );
                             // Check for user override — preserve exact f64 value
                             let override_val = self
@@ -472,7 +475,8 @@ impl ScrollEngine {
                                 }
                                 log::info!(
                                     "[threshold] override: {:?} → threshold={:.0}",
-                                    &app_key.exe_path, val
+                                    &app_key.exe_path,
+                                    val
                                 );
                             }
                             self.pid_to_key.insert(target_pid, app_key);

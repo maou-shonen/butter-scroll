@@ -2,26 +2,26 @@
 
 mod app;
 mod config;
-mod traits;
-mod engine;
-mod pulse;
-mod threshold;
 mod detector;
+mod engine;
 mod injector;
-mod util;
+mod pulse;
 mod state;
+mod threshold;
+mod traits;
+mod util;
 
+#[cfg(target_os = "windows")]
+mod commands;
+mod detector_win;
 #[cfg(target_os = "windows")]
 mod hook;
 #[cfg(target_os = "windows")]
 mod keyboard_hook;
-mod detector_win;
 #[cfg(target_os = "windows")]
 mod resolve_win;
 #[cfg(target_os = "windows")]
 mod tray;
-#[cfg(target_os = "windows")]
-mod commands;
 
 mod resolve;
 
@@ -84,7 +84,11 @@ pub fn run() {
                 if old.exists() {
                     let _ = std::fs::create_dir_all(&config_dir);
                     let _ = std::fs::copy(&old, &config_path);
-                    log::info!("[config] migrated config from {:?} to {:?}", old, config_path);
+                    log::info!(
+                        "[config] migrated config from {:?} to {:?}",
+                        old,
+                        config_path
+                    );
                 }
             }
         }
@@ -130,11 +134,9 @@ pub fn run() {
 
         let _mouse_hook = crate::hook::MouseHook::install(engine_tx.clone())
             .expect("Failed to install mouse hook");
-        let _keyboard_hook = crate::keyboard_hook::KeyboardHook::install(
-            engine_tx.clone(),
-            config.keyboard.clone(),
-        )
-        .expect("Failed to install keyboard hook");
+        let _keyboard_hook =
+            crate::keyboard_hook::KeyboardHook::install(engine_tx.clone(), config.keyboard.clone())
+                .expect("Failed to install keyboard hook");
 
         let _engine_thread = std::thread::spawn(move || {
             engine.run();
