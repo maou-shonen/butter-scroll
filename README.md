@@ -1,3 +1,5 @@
+[繁體中文](README.zh.md)
+
 # butter-scroll
 
 Buttery smooth mouse wheel scrolling for Windows.

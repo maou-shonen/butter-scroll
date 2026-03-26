@@ -1,3 +1,5 @@
+[English](README.md)
+
 # butter-scroll
 
 如奶油般滑順的 Windows 滑鼠滾輪體驗。
