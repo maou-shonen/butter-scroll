@@ -139,11 +139,27 @@ pub fn run() {
                 commands::toggle_keyboard,
                 commands::toggle_autostart,
                 commands::get_status,
+                commands::check_for_updates,
             ])
             .manage(app_state)
             .setup(|app| {
                 cleanup_old_autostart();
                 tray::setup_tray(app.handle())?;
+
+                // Delayed startup update check (5 seconds after launch)
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                    tauri::async_runtime::block_on(async {
+                        use tauri_plugin_updater::UpdaterExt;
+                        if let Ok(updater) = handle.updater() {
+                            if let Ok(Some(update)) = updater.check().await {
+                                log::info!("[updater] update available: {}", update.version);
+                            }
+                        }
+                    });
+                });
+
                 Ok(())
             })
             .on_window_event(|window, event| {

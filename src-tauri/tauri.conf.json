@@ -46,5 +46,16 @@
         "silent": true
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "PLACEHOLDER_PUBKEY",
+      "endpoints": [
+        "https://github.com/maou-shonen/butter-scroll/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

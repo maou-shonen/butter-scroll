@@ -96,3 +96,18 @@ pub fn get_status(state: State<AppState>) -> Result<AppStatus, String> {
         autostart_enabled: config.general.autostart,
     })
 }
+
+/// Manually triggers an update check. Used by UI "Check for Updates" button.
+#[tauri::command]
+pub async fn check_for_updates(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(update.is_some())
+}
