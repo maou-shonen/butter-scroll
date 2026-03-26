@@ -5,6 +5,17 @@ use crate::config::{Config, ConfigStore};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
+/// Sync keyboard hook state — pauses it when global smooth scrolling is disabled.
+fn sync_keyboard_hook(config: &Config) {
+    if config.general.enabled {
+        crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
+    } else {
+        let mut paused = config.keyboard.clone();
+        paused.enabled = false;
+        crate::keyboard_hook::KeyboardHook::update_config(&paused);
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AppStatus {
     pub enabled: bool,
@@ -31,8 +42,8 @@ pub fn save_config(config: Config, state: State<AppState>) -> Result<(), String>
         .send(EngineCommand::Reload(Box::new(config.clone())))
         .map_err(|e| e.to_string())?;
 
-    // Hot-reload keyboard hook config
-    crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
+    // Hot-reload keyboard hook — respects global enabled state
+    sync_keyboard_hook(&config);
 
     Ok(())
 }
@@ -48,6 +59,7 @@ pub fn toggle_enabled(state: State<AppState>) -> Result<bool, String> {
         .engine_tx
         .send(EngineCommand::SetEnabled(new_state))
         .map_err(|e| e.to_string())?;
+    sync_keyboard_hook(&config);
     Ok(new_state)
 }
 
@@ -62,7 +74,7 @@ pub fn toggle_keyboard(state: State<AppState>) -> Result<bool, String> {
         .engine_tx
         .send(EngineCommand::Reload(Box::new(config.clone())))
         .map_err(|e| e.to_string())?;
-    crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
+    sync_keyboard_hook(&config);
     Ok(new_state)
 }
 

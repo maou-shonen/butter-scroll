@@ -23,6 +23,9 @@
     } else {
       group.mode = value as KeyboardMode;
     }
+    // Trigger Svelte reactivity — in-place mutation of nested object
+    // doesn't cause reassignment, so isDirty in App.svelte won't detect the change.
+    config = config;
   }
 
   function getGroupModeValue(group: KeyboardGroupConfig): string {

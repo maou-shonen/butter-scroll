@@ -6,9 +6,20 @@ use tauri::{
 
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::config::ConfigStore;
+use crate::config::{Config, ConfigStore};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
+
+/// Sync keyboard hook state — pauses it when global smooth scrolling is disabled.
+fn sync_keyboard_hook(config: &Config) {
+    if config.general.enabled {
+        crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
+    } else {
+        let mut paused = config.keyboard.clone();
+        paused.enabled = false;
+        crate::keyboard_hook::KeyboardHook::update_config(&paused);
+    }
+}
 
 /// Build the system tray icon with a full context menu.
 ///
@@ -86,6 +97,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     {
                         log::error!("[tray] failed to send engine command: {e}");
                     }
+                    // Sync keyboard hook — pause it when globally disabled
+                    sync_keyboard_hook(&config);
                 }
                 "keyboard" => {
                     let mut config = state.config_store.load();
@@ -94,7 +107,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                         log::error!("[tray] failed to save config: {e}");
                         return;
                     }
-                    crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
+                    sync_keyboard_hook(&config);
                     if let Err(e) = state
                         .engine_tx
                         .send(EngineCommand::Reload(Box::new(config)))
@@ -120,10 +133,17 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                         log::error!("[tray] failed to toggle autostart: {e}");
                         return;
                     }
+                    let new_state = !is_enabled;
                     let mut config = state.config_store.load();
-                    config.general.autostart = !is_enabled;
+                    config.general.autostart = new_state;
                     if let Err(e) = state.config_store.save(&config) {
-                        log::error!("[tray] failed to save config: {e}");
+                        log::error!("[tray] failed to save config, rolling back: {e}");
+                        // Rollback OS autostart state
+                        if new_state {
+                            let _ = autostart_manager.disable();
+                        } else {
+                            let _ = autostart_manager.enable();
+                        }
                     }
                 }
                 "exit" => {

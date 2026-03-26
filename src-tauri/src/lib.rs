@@ -140,8 +140,15 @@ pub fn run() {
             crate::keyboard_hook::KeyboardHook::install(engine_tx.clone(), config.keyboard.clone())
                 .expect("Failed to install keyboard hook");
 
-        let _engine_thread = std::thread::spawn(move || {
+        let cache_for_save = Arc::clone(&threshold_cache);
+        let cache_path_for_save = config_dir.join("threshold_cache.json");
+        let engine_thread = std::thread::spawn(move || {
             engine.run();
+            // Save threshold cache when engine stops
+            if let Ok(cache) = cache_for_save.lock() {
+                let _ = cache.save(&cache_path_for_save);
+                log::info!("[engine] threshold cache saved on shutdown");
+            }
         });
 
         let app_state = state::AppState {
@@ -208,6 +215,10 @@ pub fn run() {
             })
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
+
+        // Clean shutdown: stop engine and save threshold cache
+        let _ = engine_tx.send(crate::traits::EngineCommand::Stop);
+        let _ = engine_thread.join();
     }
 
     #[cfg(not(target_os = "windows"))]
