@@ -20,6 +20,8 @@ mod detector_win;
 mod resolve_win;
 #[cfg(target_os = "windows")]
 mod tray;
+#[cfg(target_os = "windows")]
+mod commands;
 
 mod resolve;
 
@@ -97,6 +99,14 @@ pub fn run() {
             .plugin(tauri_plugin_dialog::init())
             .plugin(tauri_plugin_process::init())
             .plugin(tauri_plugin_updater::Builder::new().build())
+            .invoke_handler(tauri::generate_handler![
+                commands::get_config,
+                commands::save_config,
+                commands::toggle_enabled,
+                commands::toggle_keyboard,
+                commands::toggle_autostart,
+                commands::get_status,
+            ])
             .manage(app_state)
             .setup(|app| {
                 tray::setup_tray(app.handle())?;
