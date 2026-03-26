@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::detector::ScrollDetector;
-use crate::pulse::Pulse;
+use crate::easing::Easing;
 use crate::resolve::ProcessResolver;
 use crate::threshold::{AppKey, AppThresholdCache, ThresholdMode};
 use crate::traits::{DetectRequest, EngineCommand, ScrollOutput, TimeSource};
@@ -38,7 +38,7 @@ pub struct ScrollEngine {
     config: Config,
 
     // Animation state
-    pulse: Pulse,
+    easing: Easing,
     queue: Vec<ScrollItem>,
     direction: (i8, i8),
     last_scroll_time: u64,
@@ -77,7 +77,11 @@ impl ScrollEngine {
             }
         });
 
-        let pulse = Pulse::new(config.scroll.pulse_scale, config.scroll.pulse_normalize);
+        let easing = Easing::new(
+            config.scroll.easing,
+            config.scroll.pulse_scale,
+            config.scroll.pulse_normalize,
+        );
         Self {
             time,
             output,
@@ -85,7 +89,7 @@ impl ScrollEngine {
             rx,
             detect_tx,
             config,
-            pulse,
+            easing,
             queue: Vec::with_capacity(32),
             direction: (0, 0),
             last_scroll_time: 0,
@@ -227,8 +231,6 @@ impl ScrollEngine {
     pub(crate) fn tick(&mut self) -> (i32, i32) {
         let now = self.time.now_ms();
         let anim_time = self.config.scroll.animation_time as u64;
-        let use_pulse = self.config.scroll.pulse_algorithm;
-
         let mut scroll_x: i32 = 0;
         let mut scroll_y: i32 = 0;
 
@@ -239,13 +241,7 @@ impl ScrollEngine {
             let position = if finished {
                 1.0
             } else {
-                elapsed as f64 / anim_time as f64
-            };
-
-            let position = if use_pulse {
-                self.pulse.apply(position)
-            } else {
-                position
+                self.easing.apply(elapsed as f64 / anim_time as f64)
             };
 
             let x = (item.x * position - item.last_x) as i32;
@@ -398,7 +394,11 @@ impl ScrollEngine {
         self.pending_y = 0.0;
         self.last_scroll_time = 0;
         self.direction = (0, 0);
-        self.pulse = Pulse::new(config.scroll.pulse_scale, config.scroll.pulse_normalize);
+        self.easing = Easing::new(
+            config.scroll.easing,
+            config.scroll.pulse_scale,
+            config.scroll.pulse_normalize,
+        );
         self.config = config;
     }
 
@@ -792,6 +792,43 @@ mod tests {
         assert_eq!(engine.pending_y, 0.0);
         assert_eq!(engine.last_scroll_time, 0);
         assert_eq!(engine.direction, (0, 0));
+    }
+
+    #[test]
+    fn reload_switches_easing_type() {
+        use crate::easing::EasingType;
+
+        let (mut engine, time, _output) = test_engine();
+        assert_eq!(engine.easing.easing_type(), EasingType::Pulse);
+
+        // Switch to OutCubic via config reload.
+        let mut new_cfg = engine.config.clone();
+        new_cfg.scroll.easing = EasingType::OutCubic;
+        engine.apply_config(new_cfg);
+        assert_eq!(engine.easing.easing_type(), EasingType::OutCubic);
+
+        // Verify the new easing produces different output than Pulse.
+        time.set(0);
+        engine.on_scroll(0.0, -100.0);
+        time.set(200); // 50% of 400ms animation
+        let (_, dy_cubic) = engine.tick();
+
+        // Reset and test with Pulse.
+        let mut pulse_cfg = engine.config.clone();
+        pulse_cfg.scroll.easing = EasingType::Pulse;
+        engine.apply_config(pulse_cfg);
+        time.set(0);
+        engine.on_scroll(0.0, -100.0);
+        time.set(200);
+        let (_, dy_pulse) = engine.tick();
+
+        // Both should produce non-zero output, but differ in magnitude.
+        assert!(dy_cubic != 0, "OutCubic should produce non-zero scroll");
+        assert!(dy_pulse != 0, "Pulse should produce non-zero scroll");
+        assert_ne!(
+            dy_cubic, dy_pulse,
+            "OutCubic and Pulse should produce different scroll amounts at midpoint"
+        );
     }
 
     #[test]
