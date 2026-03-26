@@ -1,50 +1,62 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import type { Config } from "./lib/types";
+  import { getConfig, saveConfig } from "./lib/api";
   import ScrollSettings from "./lib/ScrollSettings.svelte";
   import AccelerationSettings from "./lib/AccelerationSettings.svelte";
   import OutputSettings from "./lib/OutputSettings.svelte";
   import KeyboardSettings from "./lib/KeyboardSettings.svelte";
   import GeneralSettings from "./lib/GeneralSettings.svelte";
 
-  // Config will be loaded from Tauri in T14 — use defaults for now
-  let config: Config = {
-    scroll: {
-      frame_rate: 150,
-      animation_time: 400,
-      step_size: 100,
-      pulse_algorithm: true,
-      pulse_scale: 4.0,
-      pulse_normalize: 1.0,
-      inverted: false,
-    },
-    acceleration: {
-      delta_ms: 50,
-      max: 3.0,
-    },
-    output: {
-      inject_threshold: "auto",
-      app_overrides: {},
-    },
-    general: {
-      autostart: false,
-      enabled: true,
-    },
-    keyboard: {
-      enabled: true,
-      mode: "always",
-      page_up_down: { mode: undefined },
-      arrow_keys: { mode: "off" },
-      space: { mode: "off" },
-    },
-  };
-
+  // State
+  let config: Config | null = null;
   let saveStatus = "";
   let isSaving = false;
+  let error = "";
+
+  // Cleanup handle for window focus listener
+  let unlistenFocus: (() => void) | null = null;
+
+  // Load config from backend
+  async function loadConfig() {
+    try {
+      config = await getConfig();
+      error = "";
+    } catch (e) {
+      error = `無法載入設定: ${e}`;
+    }
+  }
+
+  onMount(async () => {
+    await loadConfig();
+
+    // Re-fetch config when window gains focus (syncs tray toggle changes)
+    const appWindow = getCurrentWindow();
+    unlistenFocus = await appWindow.onFocusChanged(async ({ payload: focused }) => {
+      if (focused) {
+        await loadConfig();
+      }
+    });
+  });
+
+  onDestroy(() => {
+    if (unlistenFocus) unlistenFocus();
+  });
 
   async function handleSave() {
-    // IPC will be wired in T14
-    saveStatus = "已儲存（IPC 待實作）";
-    setTimeout(() => (saveStatus = ""), 2000);
+    if (!config) return;
+    isSaving = true;
+    saveStatus = "";
+    try {
+      await saveConfig(config);
+      saveStatus = "✓ 已儲存";
+      setTimeout(() => (saveStatus = ""), 2000);
+    } catch (e) {
+      saveStatus = `儲存失敗: ${e}`;
+    } finally {
+      isSaving = false;
+    }
   }
 </script>
 
@@ -53,27 +65,38 @@
     <h1>butter-scroll 設定</h1>
   </header>
 
-  <div class="settings">
-    <GeneralSettings bind:config={config.general} />
-    <hr />
-    <ScrollSettings bind:config={config.scroll} />
-    <hr />
-    <AccelerationSettings bind:config={config.acceleration} />
-    <hr />
-    <OutputSettings bind:config={config.output} />
-    <hr />
-    <KeyboardSettings bind:config={config.keyboard} />
-  </div>
+  {#if error}
+    <div class="error">{error}</div>
+  {:else if config === null}
+    <div class="loading">載入中...</div>
+  {:else}
+    <div class="settings">
+      <GeneralSettings bind:config={config.general} />
+      <hr />
+      <ScrollSettings bind:config={config.scroll} />
+      <hr />
+      <AccelerationSettings bind:config={config.acceleration} />
+      <hr />
+      <OutputSettings bind:config={config.output} />
+      <hr />
+      <KeyboardSettings bind:config={config.keyboard} />
+    </div>
+  {/if}
 
   <footer>
     <div class="save-row">
       {#if saveStatus}
-        <span class="save-status">{saveStatus}</span>
+        <span
+          class="save-status"
+          class:save-error={saveStatus.includes("失敗")}
+        >
+          {saveStatus}
+        </span>
       {/if}
       <button
         type="button"
         class="save-btn"
-        disabled={isSaving}
+        disabled={isSaving || config === null}
         on:click={handleSave}
       >
         {isSaving ? "儲存中..." : "儲存設定"}
@@ -118,6 +141,17 @@
     margin: 0.5rem 0;
   }
 
+  .loading,
+  .error {
+    padding: 2rem 1.25rem;
+    color: #666;
+    text-align: center;
+  }
+
+  .error {
+    color: #dc2626;
+  }
+
   footer {
     padding: 0.75rem 1.25rem;
     border-top: 1px solid #e5e5e5;
@@ -134,6 +168,10 @@
   .save-status {
     font-size: 0.8rem;
     color: #22c55e;
+  }
+
+  .save-error {
+    color: #dc2626;
   }
 
   .save-btn {
