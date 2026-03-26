@@ -73,6 +73,11 @@ fn run_windows() -> Result<(), String> {
     let resolver = Arc::new(WindowsProcessResolver::new());
     let detector = Box::new(WindowsScrollDetector::new());
 
+    // Load threshold cache from disk (alongside config file)
+    let cache_path = store.path().with_file_name("threshold_cache.json");
+    let threshold_cache = crate::threshold::AppThresholdCache::load(&cache_path);
+    let threshold_cache = std::sync::Arc::new(std::sync::Mutex::new(threshold_cache));
+
     let mut engine = ScrollEngine::new(
         clock,
         output,
@@ -82,7 +87,16 @@ fn run_windows() -> Result<(), String> {
         engine_tx.clone(),
         engine_rx,
     );
-    let engine_thread = std::thread::spawn(move || engine.run());
+    engine.set_threshold_cache(threshold_cache.clone());
+    let cache_path_for_thread = cache_path.clone();
+    let cache_for_save = threshold_cache.clone();
+    let engine_thread = std::thread::spawn(move || {
+        engine.run();
+        // Save cache on engine shutdown
+        if let Ok(cache) = cache_for_save.lock() {
+            let _ = cache.save(&cache_path_for_thread);
+        }
+    });
 
     // 3) Install low-level hooks
     let _mouse_hook = MouseHook::install(engine_tx.clone())?;

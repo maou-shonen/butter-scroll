@@ -114,13 +114,6 @@ impl AppThresholdCache {
         self.modes.get(app_key)
     }
 
-    /// Look up a user-configured override for the given exe path.
-    ///
-    /// Stub — will be wired to `Config.output.app_overrides` in Task 6.
-    pub fn lookup_override(&self, _exe_path: &str) -> Option<f64> {
-        None
-    }
-
     // -- Persistence --------------------------------------------------------
 
     /// Persist resolved entries to a JSON file (atomic write via temp+rename).
@@ -259,12 +252,6 @@ mod tests {
         let key = make_key("/opt/app/bin");
         cache.set_mode(key.clone(), ThresholdMode::Detecting);
         assert!((cache.get_threshold(Some(&key)) - 1.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn lookup_override_returns_none_stub() {
-        let cache = AppThresholdCache::new();
-        assert_eq!(cache.lookup_override("anything.exe"), None);
     }
 
     #[test]

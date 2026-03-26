@@ -94,6 +94,7 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
                         delta,
                         horizontal,
                         target_pid: pid,
+                        target_hwnd: hwnd_root as isize,
                     })
                     .is_ok()
                 {

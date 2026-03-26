@@ -43,7 +43,11 @@ pub struct ScrollEngine {
     direction: (i8, i8),
     last_scroll_time: u64,
     current_target_pid: u32,
+    current_target_hwnd: isize,
     pid_to_key: HashMap<u32, AppKey>,
+    /// Per-app user overrides: AppKey → f64 threshold value.
+    /// Separated from ThresholdMode so we preserve the user's exact value.
+    app_override_cache: HashMap<AppKey, f64>,
     threshold_cache: Arc<Mutex<AppThresholdCache>>,
 
     // Accumulator — collects animation output and injects once configured
@@ -86,7 +90,9 @@ impl ScrollEngine {
             direction: (0, 0),
             last_scroll_time: 0,
             current_target_pid: 0,
+            current_target_hwnd: 0,
             pid_to_key: HashMap::new(),
+            app_override_cache: HashMap::new(),
             threshold_cache: Arc::new(Mutex::new(AppThresholdCache::new())),
             pending_x: 0.0,
             pending_y: 0.0,
@@ -295,13 +301,17 @@ impl ScrollEngine {
             return self.config.output.inject_threshold;
         }
 
-        let app_key = self.pid_to_key.get(&self.current_target_pid);
-        if app_key.is_none() {
+        let Some(app_key) = self.pid_to_key.get(&self.current_target_pid) else {
             return self.config.output.inject_threshold;
+        };
+
+        // User override takes priority — use exact f64 value
+        if let Some(&val) = self.app_override_cache.get(app_key) {
+            return val;
         }
 
         if let Ok(cache) = self.threshold_cache.lock() {
-            cache.get_threshold(app_key)
+            cache.get_threshold(Some(app_key))
         } else {
             self.config.output.inject_threshold
         }
@@ -401,38 +411,65 @@ impl ScrollEngine {
                 delta,
                 horizontal,
                 target_pid,
+                target_hwnd,
             } => {
                 self.current_target_pid = target_pid;
+                self.current_target_hwnd = target_hwnd;
 
-                // Resolve new PIDs to AppKey and apply user overrides
-                if target_pid != 0 && !self.pid_to_key.contains_key(&target_pid) {
-                    if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
-                        eprintln!(
-                            "[threshold] new app: {:?} (pid={}), status=Unknown",
-                            &app_key.exe_path, target_pid
-                        );
-                        // Check for user override first — bypasses detection
-                        let override_val = self
-                            .config
-                            .output
-                            .app_overrides
-                            .get(app_key.exe_path.to_str().unwrap_or(""))
-                            .copied();
-                        if let Some(val) = override_val {
-                            let mode = if val >= 100.0 {
-                                ThresholdMode::Legacy120
+                // Resolve PID → AppKey. Re-resolve if PID was recycled
+                // (exe path changed for same PID).
+                if target_pid != 0 {
+                    let need_resolve = match self.pid_to_key.get(&target_pid) {
+                        None => true,
+                        Some(existing) => {
+                            // Check for PID reuse: resolve again and compare
+                            if let Some(fresh) = self.resolver.resolve_pid(target_pid) {
+                                if fresh.exe_path != existing.exe_path {
+                                    eprintln!(
+                                        "[threshold] PID {} recycled: {:?} → {:?}",
+                                        target_pid, existing.exe_path, fresh.exe_path
+                                    );
+                                    true
+                                } else {
+                                    false
+                                }
                             } else {
-                                ThresholdMode::SmoothOk
-                            };
-                            if let Ok(mut cache) = self.threshold_cache.lock() {
-                                cache.set_mode(app_key.clone(), mode);
+                                false
                             }
-                            eprintln!(
-                                "[threshold] override: {:?} → threshold={:.0}",
-                                &app_key.exe_path, val
-                            );
                         }
-                        self.pid_to_key.insert(target_pid, app_key);
+                    };
+
+                    if need_resolve {
+                        if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
+                            eprintln!(
+                                "[threshold] new app: {:?} (pid={}), status=Unknown",
+                                &app_key.exe_path, target_pid
+                            );
+                            // Check for user override — preserve exact f64 value
+                            let override_val = self
+                                .config
+                                .output
+                                .app_overrides
+                                .get(app_key.exe_path.to_str().unwrap_or(""))
+                                .copied();
+                            if let Some(val) = override_val {
+                                self.app_override_cache.insert(app_key.clone(), val);
+                                // Also mark in threshold cache so detection is skipped
+                                let mode = if val >= 100.0 {
+                                    ThresholdMode::Legacy120
+                                } else {
+                                    ThresholdMode::SmoothOk
+                                };
+                                if let Ok(mut cache) = self.threshold_cache.lock() {
+                                    cache.set_mode(app_key.clone(), mode);
+                                }
+                                eprintln!(
+                                    "[threshold] override: {:?} → threshold={:.0}",
+                                    &app_key.exe_path, val
+                                );
+                            }
+                            self.pid_to_key.insert(target_pid, app_key);
+                        }
                     }
                 }
 
@@ -448,7 +485,7 @@ impl ScrollEngine {
                     if should_detect {
                         eprintln!("[threshold] detecting: {:?}", &app_key.exe_path);
                         let _ = self.detect_tx.send(DetectRequest {
-                            hwnd: 0,
+                            hwnd: target_hwnd,
                             app_key,
                             expected_delta: self.config.scroll.step_size,
                         });
@@ -1029,6 +1066,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 42,
+            target_hwnd: 0,
         });
 
         assert_eq!(engine.pid_to_key.get(&42), Some(&app_key));
@@ -1046,6 +1084,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 999,
+            target_hwnd: 0,
         });
 
         // No entry in pid_to_key
@@ -1076,6 +1115,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 100,
+            target_hwnd: 0,
         });
 
         // Should have resolved and applied override
@@ -1107,6 +1147,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 200,
+            target_hwnd: 0,
         });
 
         assert_eq!(engine.pid_to_key.get(&200), Some(&app_key));
@@ -1134,6 +1175,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 50,
+            target_hwnd: 0,
         });
 
         // Should still have the same entry (resolver not called again)
@@ -1153,6 +1195,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 314,
+            target_hwnd: 0,
         });
 
         std::thread::sleep(Duration::from_millis(10));
@@ -1175,6 +1218,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 2718,
+            target_hwnd: 0,
         });
 
         {
@@ -1186,6 +1230,7 @@ mod tests {
             delta: -120,
             horizontal: false,
             target_pid: 2718,
+            target_hwnd: 0,
         });
 
         {

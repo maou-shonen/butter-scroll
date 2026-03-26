@@ -196,6 +196,7 @@ mod platform {
                                     delta,
                                     horizontal: false,
                                     target_pid: 0,
+                                    target_hwnd: 0,
                                 },
                                 KeyIntent::PageScroll { direction, .. } => {
                                     EngineCommand::ScrollRaw {

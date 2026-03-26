@@ -28,6 +28,7 @@ pub enum EngineCommand {
         delta: i16,
         horizontal: bool,
         target_pid: u32,
+        target_hwnd: isize,
     },
     /// Pre-scaled scroll — bypasses `step_size / 120` normalization.
     /// The delta already represents the intended wheel output amount.
