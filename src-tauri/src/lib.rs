@@ -3,7 +3,6 @@
 mod app;
 mod config;
 mod detector;
-mod easing;
 mod engine;
 mod injector;
 mod pulse;
