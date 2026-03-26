@@ -18,6 +18,8 @@ mod keyboard_hook;
 mod detector_win;
 #[cfg(target_os = "windows")]
 mod resolve_win;
+#[cfg(target_os = "windows")]
+mod tray;
 
 mod resolve;
 
@@ -97,9 +99,7 @@ pub fn run() {
             .plugin(tauri_plugin_updater::Builder::new().build())
             .manage(app_state)
             .setup(|app| {
-                let _tray = tauri::tray::TrayIconBuilder::new()
-                    .tooltip("butter-scroll")
-                    .build(app)?;
+                tray::setup_tray(app.handle())?;
                 Ok(())
             })
             .on_window_event(|window, event| {
