@@ -5,8 +5,20 @@
     <link rel="stylesheet" href="/src/app.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>butter-scroll 設定</title>
+    <script>
+      // Capture-phase listener catches module script loading errors too
+      window.addEventListener("error", function (e) {
+        var el = document.getElementById("__err");
+        if (el) el.textContent += "[error] " + (e.message || e) + "\n" + (e.filename || "") + ":" + (e.lineno || "") + "\n";
+      }, true);
+      window.addEventListener("unhandledrejection", function (e) {
+        var el = document.getElementById("__err");
+        if (el) el.textContent += "[unhandled] " + String(e.reason || e) + "\n";
+      });
+    </script>
   </head>
   <body>
+    <pre id="__err" style="color:red;padding:1em;font-size:14px;white-space:pre-wrap"></pre>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
