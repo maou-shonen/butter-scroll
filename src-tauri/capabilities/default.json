@@ -6,7 +6,7 @@
   "permissions": [
     "core:default",
     "log:default",
-    "tray-icon:default",
+    "core:tray:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",
