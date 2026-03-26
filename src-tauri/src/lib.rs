@@ -84,13 +84,18 @@ pub fn run() {
                 .and_then(|p| p.parent().map(|d| d.join("config.toml")));
             if let Some(old) = old_path {
                 if old.exists() {
-                    let _ = std::fs::create_dir_all(&config_dir);
-                    let _ = std::fs::copy(&old, &config_path);
-                    log::info!(
-                        "[config] migrated config from {:?} to {:?}",
-                        old,
-                        config_path
-                    );
+                    if let Err(e) = std::fs::create_dir_all(&config_dir) {
+                        log::warn!("[config] failed to create app data dir: {e}");
+                    } else {
+                        match std::fs::copy(&old, &config_path) {
+                            Ok(_) => log::info!(
+                                "[config] migrated config from {:?} to {:?}",
+                                old,
+                                config_path
+                            ),
+                            Err(e) => log::warn!("[config] failed to migrate config: {e}"),
+                        }
+                    }
                 }
             }
         }
@@ -108,7 +113,9 @@ pub fn run() {
                 .and_then(|p| p.parent().map(|d| d.join("threshold_cache.json")));
             if let Some(old) = old_cache {
                 if old.exists() {
-                    let _ = std::fs::copy(&old, &cache_path);
+                    if let Err(e) = std::fs::copy(&old, &cache_path) {
+                        log::warn!("[config] failed to migrate threshold cache: {e}");
+                    }
                 }
             }
         }

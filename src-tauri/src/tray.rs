@@ -107,13 +107,14 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                         log::error!("[tray] failed to save config: {e}");
                         return;
                     }
-                    sync_keyboard_hook(&config);
+                    // Engine reload first, then hook update (matches commands.rs ordering)
                     if let Err(e) = state
                         .engine_tx
-                        .send(EngineCommand::Reload(Box::new(config)))
+                        .send(EngineCommand::Reload(Box::new(config.clone())))
                     {
                         log::error!("[tray] failed to send engine command: {e}");
                     }
+                    sync_keyboard_hook(&config);
                 }
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {

@@ -45,8 +45,8 @@
 
   {#if config.enabled}
     <div class="field">
-      <label><span>預設模式</span></label>
-      <select bind:value={config.mode}>
+      <label for="kb-default-mode">預設模式</label>
+      <select id="kb-default-mode" bind:value={config.mode}>
         {#each parentModeOptions as opt}
           <option value={opt.value}>{opt.label}</option>
         {/each}
@@ -57,8 +57,9 @@
     <h3>按鍵群組設定</h3>
 
     <div class="field">
-      <label><span>PageUp / PageDown</span></label>
+      <label for="kb-pageupdown">PageUp / PageDown</label>
       <select
+        id="kb-pageupdown"
         value={getGroupModeValue(config.page_up_down)}
         on:change={(e) => handleGroupModeChange(config.page_up_down, (e.target as HTMLSelectElement).value)}
       >
@@ -70,8 +71,9 @@
     </div>
 
     <div class="field">
-      <label><span>方向鍵（↑↓）</span></label>
+      <label for="kb-arrowkeys">方向鍵（↑↓）</label>
       <select
+        id="kb-arrowkeys"
         value={getGroupModeValue(config.arrow_keys)}
         on:change={(e) => handleGroupModeChange(config.arrow_keys, (e.target as HTMLSelectElement).value)}
       >
@@ -83,8 +85,9 @@
     </div>
 
     <div class="field">
-      <label><span>空白鍵 / Shift+空白鍵</span></label>
+      <label for="kb-space">空白鍵 / Shift+空白鍵</label>
       <select
+        id="kb-space"
         value={getGroupModeValue(config.space)}
         on:change={(e) => handleGroupModeChange(config.space, (e.target as HTMLSelectElement).value)}
       >
