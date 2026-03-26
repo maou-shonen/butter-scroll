@@ -253,11 +253,16 @@ mod tests {
 
     #[test]
     fn serde_toml_round_trip() {
-        // Simulate how it appears in TOML config.
+        // TOML requires values inside a table, so wrap in a struct.
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        struct Wrapper {
+            easing: EasingType,
+        }
         for &et in EasingType::ALL {
-            let toml_str = toml::to_string(&et).unwrap();
-            let parsed: EasingType = toml::from_str(&toml_str).unwrap();
-            assert_eq!(parsed, et, "TOML round-trip failed for {et:?}");
+            let w = Wrapper { easing: et };
+            let toml_str = toml::to_string(&w).unwrap();
+            let parsed: Wrapper = toml::from_str(&toml_str).unwrap();
+            assert_eq!(parsed, w, "TOML round-trip failed for {et:?}");
         }
     }
 }
