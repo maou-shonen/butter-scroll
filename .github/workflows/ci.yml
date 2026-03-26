@@ -28,6 +28,9 @@ jobs:
 
       - uses: jdx/mise-action@v2
 
+      - name: Ensure Rust components
+        run: rustup component add rustfmt clippy
+
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
