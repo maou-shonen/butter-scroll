@@ -85,6 +85,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let mut config = state.config_store.load();
                     config.keyboard.enabled = !config.keyboard.enabled;
                     let _ = state.config_store.save(&config);
+                    crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
                     let _ = state
                         .engine_tx
                         .send(EngineCommand::Reload(Box::new(config)));

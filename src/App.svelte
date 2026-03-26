@@ -11,6 +11,7 @@
 
   // State
   let config: Config | null = null;
+  let savedSnapshot = "";
   let saveStatus = "";
   let isSaving = false;
   let error = "";
@@ -18,10 +19,14 @@
   // Cleanup handle for window focus listener
   let unlistenFocus: (() => void) | null = null;
 
+  // Track whether user has unsaved changes
+  $: isDirty = config !== null && JSON.stringify(config) !== savedSnapshot;
+
   // Load config from backend
   async function loadConfig() {
     try {
       config = await getConfig();
+      savedSnapshot = JSON.stringify(config);
       error = "";
     } catch (e) {
       error = `無法載入設定: ${e}`;
@@ -31,10 +36,10 @@
   onMount(async () => {
     await loadConfig();
 
-    // Re-fetch config when window gains focus (syncs tray toggle changes)
+    // Re-fetch config when window gains focus — only if no unsaved edits
     const appWindow = getCurrentWindow();
     unlistenFocus = await appWindow.onFocusChanged(async ({ payload: focused }) => {
-      if (focused) {
+      if (focused && !isDirty) {
         await loadConfig();
       }
     });
@@ -50,6 +55,7 @@
     saveStatus = "";
     try {
       await saveConfig(config);
+      savedSnapshot = JSON.stringify(config);
       saveStatus = "✓ 已儲存";
       setTimeout(() => (saveStatus = ""), 2000);
     } catch (e) {
