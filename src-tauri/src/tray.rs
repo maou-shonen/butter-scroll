@@ -91,10 +91,18 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     }
                 }
                 "autostart" => {
+                    use tauri_plugin_autostart::ManagerExt;
+                    let autostart_manager = app.autostart_manager();
+                    let is_enabled = autostart_manager.is_enabled().unwrap_or(false);
+                    if is_enabled {
+                        let _ = autostart_manager.disable();
+                    } else {
+                        let _ = autostart_manager.enable();
+                    }
+                    // Sync new state to config file
                     let mut config = state.config_store.load();
-                    config.general.autostart = !config.general.autostart;
+                    config.general.autostart = !is_enabled;
                     let _ = state.config_store.save(&config);
-                    // Actual autostart registration handled by tauri-plugin-autostart (T11)
                 }
                 "exit" => {
                     app.exit(0);

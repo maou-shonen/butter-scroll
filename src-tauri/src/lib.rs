@@ -61,19 +61,51 @@ pub fn run() {
 
         use tauri::Manager;
 
-        let config_path = std::env::current_exe()
-            .ok()
-            .and_then(|path| path.parent().map(|dir| dir.join("config.toml")))
-            .unwrap_or_else(|| std::path::PathBuf::from("config.toml"));
+        // Resolve config directory: prefer %APPDATA%\com.butter-scroll.app\
+        // Fall back to exe-relative path for compatibility.
+        // If new path doesn't exist but old exe-relative config does, migrate it.
+        let config_dir = std::env::var("APPDATA")
+            .map(|p| std::path::PathBuf::from(p).join("com.butter-scroll.app"))
+            .unwrap_or_else(|_| {
+                std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                    .unwrap_or_else(|| std::path::PathBuf::from("."))
+            });
+
+        let config_path = config_dir.join("config.toml");
+
+        // Migrate old exe-relative config if new path doesn't exist yet
+        if !config_path.exists() {
+            let old_path = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("config.toml")));
+            if let Some(old) = old_path {
+                if old.exists() {
+                    let _ = std::fs::create_dir_all(&config_dir);
+                    let _ = std::fs::copy(&old, &config_path);
+                    log::info!("[config] migrated config from {:?} to {:?}", old, config_path);
+                }
+            }
+        }
+        let _ = std::fs::create_dir_all(&config_dir);
 
         let config_store = Arc::new(crate::config::FileConfigStore::new(config_path));
         let config = config_store.load();
 
-        let cache_path = config_store
-            .path()
-            .parent()
-            .map(|dir| dir.join("threshold_cache.json"))
-            .unwrap_or_else(|| std::path::PathBuf::from("threshold_cache.json"));
+        let cache_path = config_dir.join("threshold_cache.json");
+
+        // Migrate old threshold cache if needed
+        if !cache_path.exists() {
+            let old_cache = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.parent().map(|d| d.join("threshold_cache.json")));
+            if let Some(old) = old_cache {
+                if old.exists() {
+                    let _ = std::fs::copy(&old, &cache_path);
+                }
+            }
+        }
         let threshold_cache = Arc::new(Mutex::new(crate::threshold::AppThresholdCache::load(
             &cache_path,
         )));
