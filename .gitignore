@@ -1,2 +1,5 @@
 /target
+/src-tauri/target/
+/dist/
+/node_modules/
 .sisyphus/
