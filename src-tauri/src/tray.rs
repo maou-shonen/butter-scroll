@@ -96,7 +96,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     }
                 }
                 "autostart" => {
-                    let autostart_manager = app.autostart_manager();
+                    let autostart_manager = app.autolaunch();
                     let is_enabled = autostart_manager.is_enabled().unwrap_or(false);
                     if is_enabled {
                         let _ = autostart_manager.disable();
