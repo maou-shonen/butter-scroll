@@ -60,7 +60,7 @@ impl ScrollOutput for WindowsScrollOutput {
         }
 
         if !inputs.is_empty() {
-            eprintln!(
+            log::debug!(
                 "[injector] SendInput: dx={delta_x}, dy={delta_y}, count={}",
                 inputs.len()
             );
@@ -72,12 +72,12 @@ impl ScrollOutput for WindowsScrollOutput {
                     size_of::<INPUT>() as i32,
                 );
                 if sent != inputs.len() as u32 {
-                    eprintln!(
+                    log::warn!(
                         "[injector] SendInput FAILED: sent {sent} of {} (GetLastError may help)",
                         inputs.len()
                     );
                 } else {
-                    eprintln!("[injector] SendInput OK: sent {sent}");
+                    log::debug!("[injector] SendInput OK: sent {sent}");
                 }
             }
         }

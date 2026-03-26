@@ -172,7 +172,7 @@ impl ScrollEngine {
         } else {
             delta_f * sign
         };
-        eprintln!(
+        log::debug!(
             "[engine] handle_scroll: delta={delta}, step_size={}, scaled={scaled:.1}",
             self.config.scroll.step_size
         );
@@ -270,7 +270,7 @@ impl ScrollEngine {
         if self.pending_y.abs() + EPS >= threshold {
             let inject = self.pending_y.trunc() as i32;
             if inject != 0 {
-                eprintln!(
+                log::debug!(
                     "[engine] flush: inject_wheel(0, {inject}), pending_y was {:.1}",
                     self.pending_y
                 );
@@ -432,9 +432,11 @@ impl ScrollEngine {
                             // Check for PID reuse: resolve again and compare
                             if let Some(fresh) = self.resolver.resolve_pid(target_pid) {
                                 if fresh.exe_path != existing.exe_path {
-                                    eprintln!(
+                                    log::info!(
                                         "[threshold] PID {} recycled: {:?} → {:?}",
-                                        target_pid, existing.exe_path, fresh.exe_path
+                                        target_pid,
+                                        existing.exe_path,
+                                        fresh.exe_path
                                     );
                                     true
                                 } else {
@@ -448,9 +450,10 @@ impl ScrollEngine {
 
                     if need_resolve {
                         if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
-                            eprintln!(
+                            log::info!(
                                 "[threshold] new app: {:?} (pid={}), status=Unknown",
-                                &app_key.exe_path, target_pid
+                                &app_key.exe_path,
+                                target_pid
                             );
                             // Check for user override — preserve exact f64 value
                             let override_val = self
@@ -470,9 +473,10 @@ impl ScrollEngine {
                                 if let Ok(mut cache) = self.threshold_cache.lock() {
                                     cache.set_mode(app_key.clone(), mode);
                                 }
-                                eprintln!(
+                                log::info!(
                                     "[threshold] override: {:?} → threshold={:.0}",
-                                    &app_key.exe_path, val
+                                    &app_key.exe_path,
+                                    val
                                 );
                             }
                             self.pid_to_key.insert(target_pid, app_key);
@@ -493,7 +497,7 @@ impl ScrollEngine {
                             };
 
                             if should_detect {
-                                eprintln!("[threshold] detecting: {:?}", &app_key.exe_path);
+                                log::info!("[threshold] detecting: {:?}", &app_key.exe_path);
                                 let _ = self.detect_tx.send(DetectRequest {
                                     hwnd: target_hwnd,
                                     app_key,
@@ -523,7 +527,7 @@ impl ScrollEngine {
                 self.apply_config(*cfg);
             }
             EngineCommand::DetectResult { app_key, mode } => {
-                eprintln!(
+                log::info!(
                     "[threshold] detected: {:?} → {:?} (threshold={:.0})",
                     &app_key.exe_path,
                     &mode,

@@ -5,11 +5,30 @@ edition = "2021"
 description = "Buttery smooth mouse wheel scrolling for Windows"
 license = "MIT"
 
+[lib]
+name = "butter_scroll_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+
 [dependencies]
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
 crossbeam-channel = "0.5"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.59"

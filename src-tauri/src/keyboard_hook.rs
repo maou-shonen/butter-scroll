@@ -213,7 +213,7 @@ mod platform {
                                 state.intercepted_vkeys.lock().unwrap().insert(info.vkCode);
                                 return 1; // swallow keydown
                             }
-                            eprintln!(
+                            log::warn!(
                                 "[keyboard_hook] WARNING: channel send failed, passing through"
                             );
                         }
