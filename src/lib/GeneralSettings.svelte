@@ -33,7 +33,7 @@
     font-size: 0.95rem;
     font-weight: 600;
     margin: 0 0 0.75rem;
-    color: #1a1a1a;
+    color: var(--text-primary);
   }
 
   .field {
@@ -49,7 +49,7 @@
 
   .toggle-field label > span {
     font-weight: 500;
-    color: #333;
+    color: var(--text-secondary);
   }
 
   .toggle-field input[type="checkbox"] {
@@ -58,7 +58,7 @@
 
   .hint {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--text-hint);
     margin: 0.2rem 0 0 0;
     padding-left: 0;
   }

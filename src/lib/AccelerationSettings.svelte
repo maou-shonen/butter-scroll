@@ -31,12 +31,10 @@
     padding: 0.75rem 0;
   }
   h2 {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #666;
-    margin-bottom: 0.75rem;
+    margin: 0 0 0.75rem;
+    color: var(--text-primary);
   }
   .field {
     margin-bottom: 1rem;
@@ -47,10 +45,11 @@
     align-items: center;
     margin-bottom: 0.25rem;
     font-size: 0.9rem;
+    color: var(--text-secondary);
   }
   .value {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-tertiary);
     font-variant-numeric: tabular-nums;
   }
   input[type="range"] {
@@ -59,7 +58,7 @@
   }
   .hint {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--text-hint);
     margin-top: 0.1rem;
   }
 </style>

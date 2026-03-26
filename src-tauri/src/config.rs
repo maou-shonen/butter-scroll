@@ -124,6 +124,10 @@ impl<'de> Deserialize<'de> for ThresholdSetting {
                 Ok(ThresholdSetting::Fixed(v as f64))
             }
 
+            fn visit_u64<E: de::Error>(self, v: u64) -> Result<Self::Value, E> {
+                Ok(ThresholdSetting::Fixed(v as f64))
+            }
+
             fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
                 Ok(ThresholdSetting::Fixed(v))
             }

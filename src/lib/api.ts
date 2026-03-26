@@ -6,6 +6,11 @@ export async function getConfig(): Promise<Config> {
   return await invoke<Config>("get_config");
 }
 
+/** Returns the default configuration (for resetting). */
+export async function getDefaultConfig(): Promise<Config> {
+  return await invoke<Config>("get_default_config");
+}
+
 /** Saves the configuration and hot-reloads the engine. */
 export async function saveConfig(config: Config): Promise<void> {
   return await invoke<void>("save_config", { config });

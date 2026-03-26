@@ -90,12 +90,10 @@
     padding: 0.75rem 0;
   }
   h2 {
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #666;
-    margin-bottom: 0.75rem;
+    margin: 0 0 0.75rem;
+    color: var(--text-primary);
   }
   .field {
     margin-bottom: 1rem;
@@ -106,10 +104,11 @@
     align-items: center;
     margin-bottom: 0.25rem;
     font-size: 0.9rem;
+    color: var(--text-secondary);
   }
   .value {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--text-tertiary);
     font-variant-numeric: tabular-nums;
   }
   input[type="range"] {
@@ -119,23 +118,24 @@
   select {
     width: 100%;
     padding: 0.4rem 0.5rem;
-    border: 1px solid #ccc;
+    border: 1px solid var(--input-border);
     border-radius: 4px;
     font-size: 0.9rem;
-    background: #fff;
+    background: var(--input-bg);
+    color: var(--text-secondary);
     margin-top: 0.25rem;
   }
   select:focus {
     outline: none;
-    border-color: #4a9eff;
-    box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2);
+    border-color: var(--input-border-focus);
+    box-shadow: 0 0 0 2px var(--accent-glow);
   }
   .toggle-field label {
     cursor: pointer;
   }
   .hint {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--text-hint);
     margin-top: 0.1rem;
   }
 </style>

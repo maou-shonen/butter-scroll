@@ -113,14 +113,14 @@
     font-size: 0.95rem;
     font-weight: 600;
     margin: 0 0 0.75rem;
-    color: #1a1a1a;
+    color: var(--text-primary);
   }
 
   h3 {
     font-size: 0.85rem;
     font-weight: 600;
     margin: 1rem 0 0.5rem;
-    color: #333;
+    color: var(--text-secondary);
   }
 
   .field {
@@ -136,7 +136,7 @@
 
   .field > label > span:first-child {
     font-weight: 500;
-    color: #333;
+    color: var(--text-secondary);
     min-width: 100px;
   }
 
@@ -153,7 +153,7 @@
     gap: 0.4rem;
     cursor: pointer;
     font-size: 0.85rem;
-    color: #444;
+    color: var(--text-secondary);
   }
 
   .radio input[type="radio"] {
@@ -163,7 +163,7 @@
   .fixed-threshold {
     margin-top: 0.5rem;
     padding: 0.5rem;
-    background: #f8f8f8;
+    background: var(--section-bg);
     border-radius: 4px;
   }
 
@@ -172,11 +172,12 @@
     justify-content: space-between;
     margin-bottom: 0.35rem;
     font-size: 0.85rem;
+    color: var(--text-secondary);
   }
 
   .fixed-threshold .value {
     font-weight: 600;
-    color: #1a1a1a;
+    color: var(--text-primary);
   }
 
   .fixed-threshold input[type="range"] {
@@ -185,7 +186,7 @@
 
   .hint {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--text-hint);
     margin: 0.25rem 0 0;
   }
 
@@ -194,13 +195,13 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.4rem 0;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-color-light);
   }
 
   .exe-path {
     flex: 1;
     font-size: 0.8rem;
-    color: #444;
+    color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -210,24 +211,24 @@
     font-size: 0.75rem;
     font-weight: 600;
     padding: 0.15rem 0.4rem;
-    background: #e5e5e5;
+    background: var(--badge-bg);
     border-radius: 3px;
-    color: #333;
+    color: var(--badge-text);
   }
 
   .override-item button {
     font-size: 0.75rem;
     padding: 0.2rem 0.5rem;
-    background: transparent;
-    border: 1px solid #ccc;
+    background: var(--btn-secondary-bg);
+    border: 1px solid var(--btn-secondary-border);
     border-radius: 3px;
     cursor: pointer;
-    color: #666;
+    color: var(--btn-secondary-text);
   }
 
   .override-item button:hover {
-    background: #f5f5f5;
-    border-color: #999;
+    background: var(--btn-secondary-hover-bg);
+    border-color: var(--btn-secondary-hover-border);
   }
 
   .add-override {
@@ -240,30 +241,34 @@
     flex: 1;
     padding: 0.35rem 0.5rem;
     font-size: 0.8rem;
-    border: 1px solid #ddd;
+    border: 1px solid var(--input-border);
     border-radius: 3px;
+    background: var(--input-bg);
+    color: var(--text-secondary);
   }
 
   .add-override input[type="number"] {
     width: 60px;
     padding: 0.35rem 0.4rem;
     font-size: 0.8rem;
-    border: 1px solid #ddd;
+    border: 1px solid var(--input-border);
     border-radius: 3px;
     text-align: center;
+    background: var(--input-bg);
+    color: var(--text-secondary);
   }
 
   .add-override button {
     padding: 0.35rem 0.6rem;
     font-size: 0.8rem;
-    background: #1a1a1a;
-    color: white;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
     border: none;
     border-radius: 3px;
     cursor: pointer;
   }
 
   .add-override button:hover {
-    background: #333;
+    background: var(--btn-primary-hover);
   }
 </style>

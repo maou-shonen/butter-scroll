@@ -109,14 +109,14 @@
     font-size: 0.95rem;
     font-weight: 600;
     margin: 0 0 0.75rem;
-    color: #1a1a1a;
+    color: var(--text-primary);
   }
 
   h3 {
     font-size: 0.85rem;
     font-weight: 600;
     margin: 1rem 0 0.5rem;
-    color: #333;
+    color: var(--text-secondary);
   }
 
   .field {
@@ -132,7 +132,7 @@
 
   .field > label > span {
     font-weight: 500;
-    color: #333;
+    color: var(--text-secondary);
   }
 
   .toggle-field label {
@@ -147,20 +147,22 @@
     width: 100%;
     padding: 0.4rem 0.5rem;
     font-size: 0.85rem;
-    border: 1px solid #ddd;
+    border: 1px solid var(--input-border);
     border-radius: 4px;
-    background: white;
+    background: var(--input-bg);
+    color: var(--text-secondary);
     cursor: pointer;
   }
 
   select:focus {
     outline: none;
-    border-color: #999;
+    border-color: var(--input-border-focus);
+    box-shadow: 0 0 0 2px var(--accent-glow);
   }
 
   .hint {
     font-size: 0.75rem;
-    color: #666;
+    color: var(--text-hint);
     margin: 0.2rem 0 0;
   }
 </style>

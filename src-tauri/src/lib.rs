@@ -209,6 +209,7 @@ pub fn run() {
             .plugin(tauri_plugin_updater::Builder::new().build())
             .invoke_handler(tauri::generate_handler![
                 commands::get_config,
+                commands::get_default_config,
                 commands::save_config,
                 commands::toggle_enabled,
                 commands::toggle_keyboard,

@@ -29,6 +29,12 @@ pub fn get_config(state: State<AppState>) -> Result<Config, String> {
     Ok(state.config_store.load())
 }
 
+/// Returns the default configuration (for "Reset to Default" in UI).
+#[tauri::command]
+pub fn get_default_config() -> Config {
+    Config::default()
+}
+
 /// Saves configuration and hot-reloads engine.
 #[tauri::command]
 pub fn save_config(config: Config, state: State<AppState>) -> Result<(), String> {
