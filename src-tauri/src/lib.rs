@@ -25,6 +25,35 @@ mod commands;
 
 mod resolve;
 
+#[cfg(target_os = "windows")]
+fn cleanup_old_autostart() {
+    use crate::util::to_wide;
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegDeleteValueW, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_SET_VALUE,
+    };
+
+    let subkey = to_wide(r"Software\Microsoft\Windows\CurrentVersion\Run");
+    let mut hkey = std::ptr::null_mut();
+
+    let result = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            subkey.as_ptr(),
+            0,
+            KEY_SET_VALUE,
+            &mut hkey,
+        )
+    };
+
+    if result == 0 {
+        let value_name = to_wide("SmoothScroll");
+        unsafe {
+            RegDeleteValueW(hkey, value_name.as_ptr());
+            RegCloseKey(hkey);
+        }
+    }
+}
+
 pub fn run() {
     #[cfg(target_os = "windows")]
     {
@@ -91,6 +120,10 @@ pub fn run() {
                     let _ = window.set_focus();
                 }
             }))
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None,
+            ))
             .plugin(
                 tauri_plugin_log::Builder::new()
                     .level(log::LevelFilter::Info)
@@ -109,6 +142,7 @@ pub fn run() {
             ])
             .manage(app_state)
             .setup(|app| {
+                cleanup_old_autostart();
                 tray::setup_tray(app.handle())?;
                 Ok(())
             })

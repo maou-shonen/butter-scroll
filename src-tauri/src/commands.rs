@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::config::{Config, ConfigStore};
 use crate::state::AppState;
@@ -67,15 +67,23 @@ pub fn toggle_keyboard(state: State<AppState>) -> Result<bool, String> {
 }
 
 /// Toggles autostart. Returns new state.
-/// NOTE: Actual registry modification is handled by tauri-plugin-autostart (T11).
-/// This command updates the config store only. Tray and T11 handle registry.
 #[tauri::command]
-pub fn toggle_autostart(state: State<AppState>) -> Result<bool, String> {
+pub fn toggle_autostart(state: State<AppState>, app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+
+    let autostart_manager = app.autolaunch();
+    let is_currently_enabled = autostart_manager.is_enabled().unwrap_or(false);
+
+    if is_currently_enabled {
+        autostart_manager.disable().map_err(|e| e.to_string())?;
+    } else {
+        autostart_manager.enable().map_err(|e| e.to_string())?;
+    }
+
     let mut config = state.config_store.load();
-    config.general.autostart = !config.general.autostart;
-    let new_state = config.general.autostart;
+    config.general.autostart = !is_currently_enabled;
     state.config_store.save(&config)?;
-    Ok(new_state)
+    Ok(config.general.autostart)
 }
 
 /// Returns current app status for UI initialization.
