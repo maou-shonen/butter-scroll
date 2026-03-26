@@ -297,12 +297,14 @@ impl ScrollEngine {
     // -- private helpers ----------------------------------------------------
 
     fn threshold_for_current_pid(&self) -> f64 {
+        let fallback = self.config.output.inject_threshold.fallback_threshold();
+
         if self.current_target_pid == 0 {
-            return self.config.output.inject_threshold;
+            return fallback;
         }
 
         let Some(app_key) = self.pid_to_key.get(&self.current_target_pid) else {
-            return self.config.output.inject_threshold;
+            return fallback;
         };
 
         // User override takes priority — use exact f64 value
@@ -310,10 +312,15 @@ impl ScrollEngine {
             return val;
         }
 
+        // If auto-detect is off, skip cache lookup and use global fallback
+        if !self.config.output.inject_threshold.is_auto() {
+            return fallback;
+        }
+
         if let Ok(cache) = self.threshold_cache.lock() {
             cache.get_threshold(Some(app_key))
         } else {
-            self.config.output.inject_threshold
+            fallback
         }
     }
 
@@ -473,8 +480,8 @@ impl ScrollEngine {
                     }
                 }
 
-                // Auto-detect: only when enabled and no user override
-                if self.config.output.auto_detect {
+                // Auto-detect: only when threshold is "auto" and no user override
+                if self.config.output.inject_threshold.is_auto() {
                     if let Some(app_key) = self.pid_to_key.get(&target_pid).cloned() {
                         if !self.app_override_cache.contains_key(&app_key) {
                             let should_detect = {
@@ -539,6 +546,7 @@ impl ScrollEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ThresholdSetting;
     use crate::detector::MockScrollDetector;
     use crate::resolve::MockProcessResolver;
     use crate::threshold::ThresholdMode;
@@ -806,7 +814,7 @@ mod tests {
     fn flush_injects_at_threshold() {
         let (mut engine, time, output) = test_engine();
         engine.config.scroll.step_size = 100.0;
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
         let anim_time = engine.config.scroll.animation_time as u64;
 
         // step_size=100 => total ≈ -100. threshold=40 should split into
@@ -847,7 +855,7 @@ mod tests {
     fn flush_threshold_120_produces_single_wheel_delta_injection() {
         let (mut engine, time, output) = test_engine();
         engine.config.scroll.step_size = 120.0;
-        engine.config.output.inject_threshold = 120.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(120.0);
         let anim_time = engine.config.scroll.animation_time as u64;
 
         time.set(0);
@@ -877,7 +885,7 @@ mod tests {
     #[test]
     fn flush_remainder_carries_over() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
 
         // Manually set pending below threshold — no injection.
         engine.pending_y = -30.0;
@@ -949,7 +957,7 @@ mod tests {
     #[test]
     fn flush_handles_float_epsilon() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
 
         // Simulate float rounding around threshold: should still flush.
         engine.pending_y = -39.9999999997;
@@ -969,7 +977,7 @@ mod tests {
     #[test]
     fn flush_remainder_carries_across_frames_with_threshold_120() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 120.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(120.0);
 
         engine.pending_y = -100.0;
         engine.flush_pending();
@@ -986,7 +994,7 @@ mod tests {
     #[test]
     fn flush_uses_per_app_threshold_legacy() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Auto;
 
         let app_key = AppKey {
             exe_path: PathBuf::from("C:/legacy/app.exe"),
@@ -1016,7 +1024,7 @@ mod tests {
     #[test]
     fn flush_uses_per_app_threshold_smooth() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 120.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Auto;
 
         let app_key = AppKey {
             exe_path: PathBuf::from("C:/smooth/app.exe"),
@@ -1039,7 +1047,7 @@ mod tests {
     #[test]
     fn flush_falls_back_to_global() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
         engine.current_target_pid = 7777;
 
         engine.pending_y = -39.0;
@@ -1047,6 +1055,37 @@ mod tests {
         assert!(
             output.drain().is_empty(),
             "should honor global threshold without pid mapping"
+        );
+
+        engine.pending_y = -40.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -40)]);
+    }
+
+    #[test]
+    fn fixed_threshold_ignores_cache() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
+
+        // Even though cache says SmoothOk (threshold=1), Fixed(40) should win
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/app/test.exe"),
+            exe_mtime: None,
+        };
+        let cache = Arc::new(Mutex::new(AppThresholdCache::new()));
+        cache
+            .lock()
+            .unwrap()
+            .set_mode(app_key.clone(), ThresholdMode::SmoothOk);
+        engine.set_threshold_cache(cache);
+        engine.pid_to_key.insert(42, app_key);
+        engine.current_target_pid = 42;
+
+        engine.pending_y = -5.0;
+        engine.flush_pending();
+        assert!(
+            output.drain().is_empty(),
+            "Fixed(40) should not flush at -5, ignoring cache SmoothOk"
         );
 
         engine.pending_y = -40.0;
@@ -1082,7 +1121,7 @@ mod tests {
     fn failed_resolution_uses_global_default() {
         // MockResolver returns None — simulates OpenProcess failure
         let (mut engine, time, output) = test_engine_with_resolver(None);
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
 
         time.set(0);
         engine.handle_command(EngineCommand::Scroll {
