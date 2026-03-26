@@ -82,7 +82,9 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let mut config = state.config_store.load();
                     config.keyboard.enabled = !config.keyboard.enabled;
                     let _ = state.config_store.save(&config);
-                    let _ = state.engine_tx.send(EngineCommand::Reload(Box::new(config)));
+                    let _ = state
+                        .engine_tx
+                        .send(EngineCommand::Reload(Box::new(config)));
                 }
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
