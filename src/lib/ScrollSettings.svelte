@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { ScrollConfig } from "./types";
-  import { EASING_OPTIONS } from "./types";
 
   export let config: ScrollConfig;
 </script>
@@ -14,7 +13,10 @@
       <span class="value">{config.frame_rate} Hz</span>
     </label>
     <input type="range" min="30" max="1000" step="1" bind:value={config.frame_rate} />
-    <p class="hint">較高值 = 更平滑，但 CPU 使用更多</p>
+    <p class="hint">
+      動畫每秒更新的次數。越高越平滑，但 CPU 使用量越多。
+      150 Hz 是平滑與效能的良好平衡點；大多數情況下不需要調整
+    </p>
   </div>
 
   <div class="field">
@@ -23,7 +25,11 @@
       <span class="value">{config.animation_time} ms</span>
     </label>
     <input type="range" min="1" max="5000" step="10" bind:value={config.animation_time} />
-    <p class="hint">較長 = 更漸進；較短 = 更快速</p>
+    <p class="hint">
+      每次滾輪刻度觸發的動畫長度。
+      較短（如 200ms）= 反應靈敏，適合快速瀏覽；
+      較長（如 600ms）= 滑順漸進，適合閱讀長文
+    </p>
   </div>
 
   <div class="field">
@@ -32,56 +38,54 @@
       <span class="value">{config.step_size}</span>
     </label>
     <input type="range" min="1" max="2000" step="1" bind:value={config.step_size} />
-    <p class="hint">每個滾輪刻度的捲動距離（100 = 預設）</p>
+    <p class="hint">
+      每個滾輪刻度的捲動距離。100 約等於 Windows 預設的 3 行。
+      想一次看更多內容可以調高，想精確瀏覽可以調低
+    </p>
   </div>
 
   <div class="field">
-    <label for="easing-select">緩動曲線</label>
-    <select id="easing-select" bind:value={config.easing}>
-      {#each EASING_OPTIONS as opt}
-        <option value={opt.value}>{opt.label}</option>
-      {/each}
-    </select>
-    <p class="hint">控制捲動動畫的加速與減速曲線（預覽功能）</p>
+    <label>
+      <span>Pulse 強度</span>
+      <span class="value">{config.pulse_scale.toFixed(1)}</span>
+    </label>
+    <input
+      type="range"
+      min="0.1"
+      max="20"
+      step="0.1"
+      bind:value={config.pulse_scale}
+    />
+    <p class="hint">
+      控制「快啟慢停」的強度。數值越高，動畫越集中在前半段完成，
+      尾端減速越明顯。4.0 是預設值；2.0 偏平穩，8.0 偏激進
+    </p>
   </div>
 
-  {#if config.easing === "pulse"}
-    <div class="field">
-      <label>
-        <span>Pulse 強度</span>
-        <span class="value">{config.pulse_scale.toFixed(1)}</span>
-      </label>
-      <input
-        type="range"
-        min="0.1"
-        max="20"
-        step="0.1"
-        bind:value={config.pulse_scale}
-      />
-    </div>
-
-    <div class="field">
-      <label>
-        <span>Pulse 標準化</span>
-        <span class="value">{config.pulse_normalize.toFixed(1)}</span>
-      </label>
-      <input
-        type="range"
-        min="0.1"
-        max="10"
-        step="0.1"
-        bind:value={config.pulse_normalize}
-      />
-      <p class="hint">保持 1.0 以自動標準化</p>
-    </div>
-  {/if}
+  <div class="field">
+    <label>
+      <span>Pulse 標準化</span>
+      <span class="value">{config.pulse_normalize.toFixed(1)}</span>
+    </label>
+    <input
+      type="range"
+      min="0.1"
+      max="10"
+      step="0.1"
+      bind:value={config.pulse_normalize}
+    />
+    <p class="hint">
+      控制曲線的輸出幅度。1.0 = 自動標準化（確保動畫完整跑完）。
+      通常不需要調整，除非你想微調 Pulse 強度的效果
+    </p>
+  </div>
 
   <div class="field toggle-field">
     <label>
       <span>反向捲動方向</span>
       <input type="checkbox" bind:checked={config.inverted} />
     </label>
-    <p class="hint">macOS 風格「自然滾動」</p>
+    <p class="hint">macOS 風格「自然滾動」— 滾輪向下時內容向上移動</p>
   </div>
 </section>
 
@@ -114,21 +118,6 @@
   input[type="range"] {
     width: 100%;
     margin: 0.25rem 0;
-  }
-  select {
-    width: 100%;
-    padding: 0.4rem 0.5rem;
-    border: 1px solid var(--input-border);
-    border-radius: 4px;
-    font-size: 0.9rem;
-    background: var(--input-bg);
-    color: var(--text-secondary);
-    margin-top: 0.25rem;
-  }
-  select:focus {
-    outline: none;
-    border-color: var(--input-border-focus);
-    box-shadow: 0 0 0 2px var(--accent-glow);
   }
   .toggle-field label {
     cursor: pointer;
