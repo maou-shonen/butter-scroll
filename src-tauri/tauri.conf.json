@@ -19,12 +19,7 @@
         "visible": false,
         "skipTaskbar": true
       }
-    ],
-    "trayIcon": {
-      "id": "main",
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": false
-    }
+    ]
   },
   "bundle": {
     "active": true,

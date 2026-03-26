@@ -79,6 +79,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .build()?;
 
     let _tray = TrayIconBuilder::new()
+        .icon(tauri::include_image!("icons/icon.png"))
         .tooltip("butter-scroll")
         .menu(&menu)
         .on_menu_event(|app, event| {
