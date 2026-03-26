@@ -18,16 +18,25 @@ butter-scroll is a lightweight system tray utility that intercepts mouse wheel a
 
 ## Install
 
-Download the latest `.exe` installer from [Releases](https://github.com/maou-shonen/butter-scroll/releases).
+Download the latest installer or portable ZIP from [Releases](https://github.com/maou-shonen/butter-scroll/releases).
+
+| Package | Description |
+|---|---|
+| `*-setup.exe` | NSIS installer — installs to user profile, includes auto-update |
+| `*-portable.zip` | Portable — extract anywhere, no installation required |
+
+> [!NOTE]
+> The portable version requires [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (pre-installed on Windows 10 22H2+ and Windows 11). Auto-update is not available in portable mode.
 
 ## Quick Start
 
-1. Run the installer — butter-scroll starts in the system tray
+1. Run the installer (or extract the portable ZIP) — butter-scroll starts in the system tray
 2. Right-click the tray icon → **Settings** to open the configuration panel
 3. Adjust scroll feel (animation time, step size, pulse intensity) and click **Save**
 4. To start on login, enable **Autostart** in General settings
 
 Configuration is stored in `%APPDATA%\com.butter-scroll.app\config.toml`.  
+In portable mode, configuration is stored next to the executable.  
 Delete the file to reset to defaults.
 
 ## Development
@@ -40,7 +49,7 @@ mise run dev       # Start dev server (Tauri + Vite HMR)
 mise run test      # Run Rust tests
 mise run check     # Cargo check
 mise run clippy    # Lint
-mise run build     # Build NSIS installer
+mise run build     # Build NSIS installer + release exe
 ```
 
 For detailed configuration options, see [docs/configuration.md](docs/configuration.md).

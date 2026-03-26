@@ -120,8 +120,13 @@ pub fn get_status(state: State<AppState>) -> Result<AppStatus, String> {
 }
 
 /// Manually triggers an update check. Used by UI "Check for Updates" button.
+/// Returns an error in portable mode (NSIS updater is not compatible).
 #[tauri::command]
-pub async fn check_for_updates(app: AppHandle) -> Result<bool, String> {
+pub async fn check_for_updates(app: AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+    if state.portable {
+        return Err("Auto-update is not available in portable mode.".to_string());
+    }
+
     use tauri_plugin_updater::UpdaterExt;
 
     let update = app

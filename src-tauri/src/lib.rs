@@ -54,6 +54,26 @@ fn cleanup_old_autostart() {
     }
 }
 
+/// Check if running in portable mode.
+///
+/// Portable mode is detected by a `.portable` marker file next to the executable.
+/// In portable mode, all data (config, cache) is stored next to the exe instead
+/// of `%APPDATA%`, and the NSIS auto-updater is skipped.
+fn is_portable() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join(".portable").exists()))
+        .unwrap_or(false)
+}
+
+/// Resolve the exe-relative directory (used for portable mode and as fallback).
+fn exe_dir() -> std::path::PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
 pub fn run() {
     #[cfg(target_os = "windows")]
     {
@@ -63,22 +83,23 @@ pub fn run() {
 
         use crate::config::ConfigStore;
 
-        // Resolve config directory: prefer %APPDATA%\com.butter-scroll.app\
-        // Fall back to exe-relative path for compatibility.
-        // If new path doesn't exist but old exe-relative config does, migrate it.
-        let config_dir = std::env::var("APPDATA")
-            .map(|p| std::path::PathBuf::from(p).join("com.butter-scroll.app"))
-            .unwrap_or_else(|_| {
-                std::env::current_exe()
-                    .ok()
-                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
-                    .unwrap_or_else(|| std::path::PathBuf::from("."))
-            });
+        let portable = is_portable();
+
+        // Portable mode: store everything next to the exe.
+        // Installed mode: use %APPDATA%\com.butter-scroll.app\
+        let config_dir = if portable {
+            log::info!("[config] portable mode detected");
+            exe_dir()
+        } else {
+            std::env::var("APPDATA")
+                .map(|p| std::path::PathBuf::from(p).join("com.butter-scroll.app"))
+                .unwrap_or_else(|_| exe_dir())
+        };
 
         let config_path = config_dir.join("config.toml");
 
-        // Migrate old exe-relative config if new path doesn't exist yet
-        if !config_path.exists() {
+        // Migrate old exe-relative config → %APPDATA% (installed mode only)
+        if !portable && !config_path.exists() {
             let old_path = std::env::current_exe()
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join("config.toml")));
@@ -106,8 +127,8 @@ pub fn run() {
 
         let cache_path = config_dir.join("threshold_cache.json");
 
-        // Migrate old threshold cache if needed
-        if !cache_path.exists() {
+        // Migrate old threshold cache → %APPDATA% (installed mode only)
+        if !portable && !cache_path.exists() {
             let old_cache = std::env::current_exe()
                 .ok()
                 .and_then(|p| p.parent().map(|d| d.join("threshold_cache.json")));
@@ -162,6 +183,7 @@ pub fn run() {
             engine_tx: engine_tx.clone(),
             config_store: Arc::clone(&config_store) as Arc<dyn crate::config::ConfigStore>,
             threshold_cache: Arc::clone(&threshold_cache),
+            portable,
         };
 
         tauri::Builder::default()
@@ -194,23 +216,26 @@ pub fn run() {
                 commands::check_for_updates,
             ])
             .manage(app_state)
-            .setup(|app| {
+            .setup(move |app| {
                 cleanup_old_autostart();
                 tray::setup_tray(app.handle())?;
 
-                // Delayed startup update check (5 seconds after launch)
-                let handle = app.handle().clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
-                    tauri::async_runtime::block_on(async {
-                        use tauri_plugin_updater::UpdaterExt;
-                        if let Ok(updater) = handle.updater() {
-                            if let Ok(Some(update)) = updater.check().await {
-                                log::info!("[updater] update available: {}", update.version);
+                // Delayed startup update check (installed mode only).
+                // The NSIS-based updater is not compatible with portable installs.
+                if !portable {
+                    let handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        tauri::async_runtime::block_on(async {
+                            use tauri_plugin_updater::UpdaterExt;
+                            if let Ok(updater) = handle.updater() {
+                                if let Ok(Some(update)) = updater.check().await {
+                                    log::info!("[updater] update available: {}", update.version);
+                                }
                             }
-                        }
+                        });
                     });
-                });
+                }
 
                 Ok(())
             })

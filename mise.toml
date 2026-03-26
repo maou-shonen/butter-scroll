@@ -16,7 +16,7 @@ fmt = { run = "cd src-tauri && cargo fmt", description = "Format Rust code" }
 clippy = { run = "cd src-tauri && cargo clippy -- -D warnings", description = "Run clippy lints" }
 
 # 建置
-build = { run = "pnpm tauri build", description = "Build NSIS installer" }
+build = { run = "pnpm tauri build", description = "Build NSIS installer + release exe" }
 build-frontend = { run = "pnpm build", description = "Build frontend only" }
 build-rust = { run = "cd src-tauri && cargo build --release", description = "Build Rust only" }
 

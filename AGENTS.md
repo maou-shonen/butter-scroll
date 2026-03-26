@@ -76,7 +76,7 @@ src/                        Frontend (Svelte 5 + TypeScript)
 
 config.default.toml         Default configuration (embedded + reference)
 mise.toml                   Dev tooling tasks (dev, test, check, clippy, build)
-.github/workflows/build.yml CI/CD — test on Linux, build NSIS installer on Windows
+.github/workflows/build.yml CI/CD — test on Linux, build NSIS installer + portable ZIP on Windows
 ```
 
 ## Frameworks & Tools
@@ -110,7 +110,7 @@ mise run test      # cargo test --lib
 mise run check     # cargo check
 mise run clippy    # cargo clippy -- -D warnings
 mise run fmt       # cargo fmt
-mise run build     # Build NSIS installer
+mise run build     # Build NSIS installer + release exe
 mise run verify    # Build frontend + run tests
 ```
 
@@ -119,3 +119,4 @@ mise run verify    # Build frontend + run tests
 - Windows-only at runtime (`cfg(target_os = "windows")`). Tests run cross-platform thanks to DI traits.
 - The scroll engine (`engine.rs`) is the largest and most complex module (~1300 lines). It is platform-agnostic by design — all Win32 calls go through trait objects.
 - Config file location: `%APPDATA%\com.butter-scroll.app\config.toml`
+- **Portable mode**: When a `.portable` marker file exists next to the exe, all data (config, threshold cache) is stored next to the exe. The NSIS auto-updater is skipped. CI produces a `*-portable.zip` containing the exe + `.portable` marker.

@@ -18,16 +18,25 @@ butter-scroll 是一個輕量的系統匣工具，在作業系統層級攔截滑
 
 ## 安裝
 
-從 [Releases](https://github.com/maou-shonen/butter-scroll/releases) 下載最新的 `.exe` 安裝程式。
+從 [Releases](https://github.com/maou-shonen/butter-scroll/releases) 下載最新的安裝程式或可攜版 ZIP。
+
+| 套件 | 說明 |
+|---|---|
+| `*-setup.exe` | NSIS 安裝程式 — 安裝至使用者目錄，含自動更新 |
+| `*-portable.zip` | 可攜版 — 解壓縮至任意位置，免安裝 |
+
+> [!NOTE]
+> 可攜版需要 [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)（Windows 10 22H2+ 及 Windows 11 已內建）。可攜版不支援自動更新。
 
 ## 快速入門
 
-1. 執行安裝程式 — butter-scroll 會啟動在系統匣
+1. 執行安裝程式（或解壓縮可攜版 ZIP）— butter-scroll 會啟動在系統匣
 2. 右鍵點擊匣圖示 → **設定** 開啟設定面板
 3. 調整捲動手感（動畫時間、步進大小、脈衝強度）後點擊 **儲存設定**
 4. 若要開機自動啟動，在「一般」設定中啟用 **開機自動啟動**
 
 設定檔位於 `%APPDATA%\com.butter-scroll.app\config.toml`。  
+可攜版的設定檔位於執行檔旁。  
 刪除該檔案即可在下次啟動時還原為預設值。
 
 ## 開發
@@ -40,7 +49,7 @@ mise run dev       # 啟動開發伺服器（Tauri + Vite HMR）
 mise run test      # 執行 Rust 測試
 mise run check     # Cargo check
 mise run clippy    # Lint 檢查
-mise run build     # 建置 NSIS 安裝程式
+mise run build     # 建置 NSIS 安裝程式 + release exe
 ```
 
 詳細設定選項請參閱 [docs/configuration.md](docs/configuration.md)。
