@@ -1,27 +1,22 @@
 [tools]
 rust = "1.94.0"
-zig = "0.15.2"
+node = "lts"
 
 [tasks]
 # 開發常用指令
-run = "cargo run"
-test = "cargo test"
-check = "cargo check"
-fmt = "cargo fmt"
-clippy = "cargo clippy"
+dev = { run = "pnpm tauri dev", description = "Start dev server" }
+test = { run = "cd src-tauri && cargo test --lib", description = "Run Rust tests" }
+check = { run = "cd src-tauri && cargo check", description = "Check compilation" }
+fmt = { run = "cd src-tauri && cargo fmt", description = "Format Rust code" }
+clippy = { run = "cd src-tauri && cargo clippy -- -D warnings", description = "Run clippy lints" }
 
 # 建置
-build = "cargo build --release"
-build-dev = "cargo build"
-
-# Windows 交叉編譯（從 Linux 直接產出 .exe）
-build-windows = { run = "cargo build --release --target x86_64-pc-windows-gnu", description = "Cross-compile Windows executable on Linux" }
-
-# 檢查 Windows target（不產出 binary，只驗證語法）
-check-windows = { run = "cargo check --target x86_64-pc-windows-gnu", description = "Check code compiles for Windows target" }
+build = { run = "pnpm tauri build", description = "Build NSIS installer" }
+build-frontend = { run = "pnpm build", description = "Build frontend only" }
+build-rust = { run = "cd src-tauri && cargo build --release", description = "Build Rust only" }
 
 # 清理
-clean = "cargo clean"
+clean = { run = "cd src-tauri && cargo clean && rm -rf dist", description = "Clean build artifacts" }
 
-# 完整驗證（測試 + 檢查 Windows target）
-verify = { depends = ["test", "check-windows"], description = "Run tests and verify Windows target" }
+# 完整驗證（前端 + Rust 測試）
+verify = { depends = ["build-frontend", "test"], description = "Build frontend and run tests" }
