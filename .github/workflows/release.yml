@@ -15,24 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - name: Cache Linux system dependencies
+        uses: awalsh128/cache-apt-pkgs-action@v1
         with:
-          version: 9
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          version: 1.0
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: pnpm
+      - uses: maou-shonen/node-cache-action@v1
 
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      - uses: jdx/mise-action@v2
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -62,17 +53,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - uses: maou-shonen/node-cache-action@v1
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: pnpm
-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@v2
 
       - uses: swatinem/rust-cache@v2
         with:
