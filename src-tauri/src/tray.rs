@@ -4,6 +4,9 @@ use tauri::{
     AppHandle, Manager,
 };
 
+use tauri_plugin_autostart::ManagerExt;
+
+use crate::config::ConfigStore;
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
@@ -93,7 +96,6 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     }
                 }
                 "autostart" => {
-                    use tauri_plugin_autostart::ManagerExt;
                     let autostart_manager = app.autostart_manager();
                     let is_enabled = autostart_manager.is_enabled().unwrap_or(false);
                     if is_enabled {
