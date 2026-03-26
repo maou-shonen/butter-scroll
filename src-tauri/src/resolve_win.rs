@@ -25,7 +25,7 @@ impl ProcessResolver for WindowsProcessResolver {
         // 1. Open process handle with minimal permissions.
         let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
         if handle.is_null() {
-            eprintln!("[resolve] OpenProcess failed for pid={pid}");
+            log::warn!("[resolve] OpenProcess failed for pid={pid}");
             return None;
         }
 
@@ -40,7 +40,7 @@ impl ProcessResolver for WindowsProcessResolver {
         unsafe { CloseHandle(handle) };
 
         if ok == 0 || len == 0 {
-            eprintln!("[resolve] QueryFullProcessImageNameW failed for pid={pid}");
+            log::warn!("[resolve] QueryFullProcessImageNameW failed for pid={pid}");
             return None;
         }
 

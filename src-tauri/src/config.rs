@@ -353,16 +353,16 @@ impl ConfigStore for FileConfigStore {
                         cfg.sanitize();
                         return cfg;
                     }
-                    Err(e) => eprintln!("[butter-scroll] config parse error: {e}"),
+                    Err(e) => log::warn!("[butter-scroll] config parse error: {e}"),
                 },
-                Err(e) => eprintln!("[butter-scroll] config read error: {e}"),
+                Err(e) => log::warn!("[butter-scroll] config read error: {e}"),
             }
         }
         // First run — create default config file.
         let mut cfg = Config::default();
         cfg.sanitize();
         if let Err(e) = self.save(&cfg) {
-            eprintln!("[butter-scroll] failed to write default config: {e}");
+            log::warn!("[butter-scroll] failed to write default config: {e}");
         }
         cfg
     }

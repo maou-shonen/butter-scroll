@@ -66,7 +66,7 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
             // Pass through any injected event (ours or other programs').
             // Only intercept genuine hardware wheel input.
             if info.flags & LLMHF_INJECTED != 0 {
-                eprintln!(
+                log::debug!(
                     "[hook] pass-through injected event (flags=0x{:X})",
                     info.flags
                 );
@@ -84,7 +84,7 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
             let mut pid: u32 = 0;
             unsafe { GetWindowThreadProcessId(hwnd_root, &mut pid) };
 
-            eprintln!(
+            log::debug!(
                 "[hook] wheel event: delta={delta}, horizontal={horizontal}, target_pid={pid}, mouseData=0x{:08X}",
                 info.mouseData
             );
@@ -102,9 +102,9 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
                     // events will be re-injected by the engine.
                     return 1;
                 }
-                eprintln!("[hook] WARNING: channel send failed, passing through");
+                log::warn!("[hook] WARNING: channel send failed, passing through");
             } else {
-                eprintln!("[hook] WARNING: ENGINE_TX not set, passing through");
+                log::warn!("[hook] WARNING: ENGINE_TX not set, passing through");
             }
         }
     }
