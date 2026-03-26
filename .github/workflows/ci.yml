@@ -81,14 +81,13 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Create portable ZIP
+      - name: Prepare portable files
         shell: pwsh
         run: |
           $dir = "butter-scroll-portable"
           New-Item -ItemType Directory -Path $dir
           Copy-Item "src-tauri/target/release/butter-scroll.exe" "$dir/"
           New-Item -ItemType File -Path "$dir/.portable" | Out-Null
-          Compress-Archive -Path "$dir/*" -DestinationPath "butter-scroll-portable.zip"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -100,4 +99,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: butter-scroll-portable
-          path: butter-scroll-portable.zip
+          path: butter-scroll-portable
+          include-hidden-files: true

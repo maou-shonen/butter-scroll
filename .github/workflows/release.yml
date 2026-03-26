@@ -94,7 +94,7 @@ jobs:
           New-Item -ItemType Directory -Path $dir
           Copy-Item "src-tauri/target/release/butter-scroll.exe" "$dir/"
           New-Item -ItemType File -Path "$dir/.portable" | Out-Null
-          Compress-Archive -Path "$dir/*" -DestinationPath "butter-scroll_${version}_x64-portable.zip"
+          Compress-Archive -LiteralPath "$dir/butter-scroll.exe", "$dir/.portable" -DestinationPath "butter-scroll_${version}_x64-portable.zip"
 
       - name: Upload portable ZIP to release
         env:
