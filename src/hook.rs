@@ -10,8 +10,9 @@ use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, SetWindowsHookExW, UnhookWindowsHookEx, HC_ACTION, HHOOK, MSLLHOOKSTRUCT,
-    WH_MOUSE_LL, WM_MOUSEHWHEEL, WM_MOUSEWHEEL,
+    CallNextHookEx, GetAncestor, GetWindowThreadProcessId, SetWindowsHookExW, UnhookWindowsHookEx,
+    WindowFromPoint, GA_ROOT, HC_ACTION, HHOOK, MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_MOUSEHWHEEL,
+    WM_MOUSEWHEEL,
 };
 
 #[cfg(target_os = "windows")]
@@ -75,12 +76,28 @@ extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRES
 
             let delta = ((info.mouseData >> 16) as u16) as i16;
             let horizontal = msg == WM_MOUSEHWHEEL;
+
+            // Resolve the PID of the window under the cursor.
+            // If WindowFromPoint returns null, pid stays 0 (global fallback).
+            let hwnd = unsafe { WindowFromPoint(info.pt) };
+            let hwnd_root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+            let mut pid: u32 = 0;
+            unsafe { GetWindowThreadProcessId(hwnd_root, &mut pid) };
+
             eprintln!(
-                "[hook] wheel event: delta={delta}, horizontal={horizontal}, mouseData=0x{:08X}",
+                "[hook] wheel event: delta={delta}, horizontal={horizontal}, target_pid={pid}, mouseData=0x{:08X}",
                 info.mouseData
             );
             if let Some(tx) = ENGINE_TX.get() {
-                if tx.send(EngineCommand::Scroll { delta, horizontal }).is_ok() {
+                if tx
+                    .send(EngineCommand::Scroll {
+                        delta,
+                        horizontal,
+                        target_pid: pid,
+                        target_hwnd: hwnd_root as isize,
+                    })
+                    .is_ok()
+                {
                     // Swallow original event only when enqueue succeeds; smoothed
                     // events will be re-injected by the engine.
                     return 1;

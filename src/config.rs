@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -47,16 +48,87 @@ pub struct AccelerationConfig {
     pub max: f64,
 }
 
+/// Threshold setting: `"auto"` for adaptive per-app detection, or a fixed
+/// numeric value (1–120) applied globally.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum ThresholdSetting {
+    /// Automatically detect per-app scroll behavior on first scroll.
+    /// Apps that over-scroll with small deltas (e.g. WPF) are auto-switched
+    /// to threshold=120; others use threshold=1 (smoothest).
+    #[default]
+    Auto,
+    /// Fixed global threshold value (1.0–120.0).
+    Fixed(f64),
+}
+
+impl ThresholdSetting {
+    /// Whether auto-detection is active.
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+
+    /// The global fallback threshold to use when no per-app data is available.
+    pub fn fallback_threshold(&self) -> f64 {
+        match self {
+            Self::Auto => 1.0,
+            Self::Fixed(v) => *v,
+        }
+    }
+}
+
+impl Serialize for ThresholdSetting {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Auto => serializer.serialize_str("auto"),
+            Self::Fixed(v) => serializer.serialize_f64(*v),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThresholdSetting {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de;
+
+        struct ThresholdVisitor;
+
+        impl<'de> de::Visitor<'de> for ThresholdVisitor {
+            type Value = ThresholdSetting;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, r#""auto" or a number between 1 and 120"#)
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                if v.eq_ignore_ascii_case("auto") {
+                    Ok(ThresholdSetting::Auto)
+                } else {
+                    Err(E::custom(format!("unknown threshold value: {v:?}")))
+                }
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                Ok(ThresholdSetting::Fixed(v as f64))
+            }
+
+            fn visit_f64<E: de::Error>(self, v: f64) -> Result<Self::Value, E> {
+                Ok(ThresholdSetting::Fixed(v))
+            }
+        }
+
+        deserializer.deserialize_any(ThresholdVisitor)
+    }
+}
+
 /// Output/injection parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputConfig {
-    /// Minimum accumulated delta before injecting a wheel event.
-    /// Lower = smoother, higher = more compatible with legacy apps.
-    /// 120 = WHEEL_DELTA (most compatible, chunkiest)
-    /// 40 = WHEEL_DELTA/3 (good balance, default)
-    /// 1 = per-frame (smoothest, modern apps only)
-    pub inject_threshold: f64,
+    /// `"auto"` (default) — adaptive per-app detection.
+    /// Or a fixed number (1–120) — static global threshold.
+    pub inject_threshold: ThresholdSetting,
+    /// Per-app threshold overrides keyed by executable path.
+    #[serde(default)]
+    pub app_overrides: HashMap<String, f64>,
 }
 
 /// General application settings.
@@ -181,10 +253,19 @@ impl Config {
         }
         self.acceleration.max = self.acceleration.max.clamp(1.0, 20.0);
 
-        if !self.output.inject_threshold.is_finite() || self.output.inject_threshold <= 0.0 {
-            self.output.inject_threshold = OutputConfig::default().inject_threshold;
+        if let ThresholdSetting::Fixed(ref mut v) = self.output.inject_threshold {
+            if !v.is_finite() || *v <= 0.0 {
+                *v = 1.0;
+            }
+            *v = v.clamp(1.0, 120.0);
         }
-        self.output.inject_threshold = self.output.inject_threshold.clamp(1.0, 120.0);
+
+        for value in self.output.app_overrides.values_mut() {
+            if !value.is_finite() {
+                *value = 1.0;
+            }
+            *value = value.clamp(1.0, 120.0);
+        }
 
         // Keyboard config: nothing numeric to clamp, but ensure mode
         // inheritance is consistent — a group set to `None` is valid
@@ -218,7 +299,8 @@ impl Default for AccelerationConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            inject_threshold: 40.0,
+            inject_threshold: ThresholdSetting::Auto,
+            app_overrides: HashMap::new(),
         }
     }
 }
@@ -315,7 +397,7 @@ mod tests {
         assert!(!cfg.scroll.inverted);
         assert_eq!(cfg.acceleration.delta_ms, 50);
         assert!((cfg.acceleration.max - 3.0).abs() < f64::EPSILON);
-        assert!((cfg.output.inject_threshold - 40.0).abs() < f64::EPSILON);
+        assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Auto);
         assert!(cfg.general.enabled);
         assert!(!cfg.general.autostart);
     }
@@ -359,7 +441,8 @@ step_size = 2.5
                 max: 0.0,
             },
             output: OutputConfig {
-                inject_threshold: f64::NEG_INFINITY,
+                inject_threshold: ThresholdSetting::Fixed(f64::NEG_INFINITY),
+                app_overrides: HashMap::new(),
             },
             general: GeneralConfig::default(),
             keyboard: KeyboardConfig::default(),
@@ -374,7 +457,8 @@ step_size = 2.5
         assert_eq!(cfg.scroll.pulse_normalize, 1.0);
         assert_eq!(cfg.acceleration.delta_ms, 1);
         assert_eq!(cfg.acceleration.max, 1.0);
-        assert_eq!(cfg.output.inject_threshold, 40.0);
+        // NEG_INFINITY sanitizes to Fixed(1.0)
+        assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Fixed(1.0));
     }
 
     #[test]
@@ -384,14 +468,105 @@ step_size = 2.5
         cfg.scroll.step_size = 5_000.0;
         cfg.scroll.pulse_scale = 0.01;
         cfg.scroll.pulse_normalize = 100.0;
-        cfg.output.inject_threshold = 500.0;
+        cfg.output.inject_threshold = ThresholdSetting::Fixed(500.0);
 
         cfg.sanitize();
 
         assert_eq!(cfg.scroll.step_size, 2_000.0);
         assert_eq!(cfg.scroll.pulse_scale, 0.1);
         assert_eq!(cfg.scroll.pulse_normalize, 10.0);
-        assert_eq!(cfg.output.inject_threshold, 120.0);
+        assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Fixed(120.0));
+    }
+
+    #[test]
+    fn config_parses_app_overrides() {
+        let text = r#"
+[output]
+inject_threshold = 40.0
+
+[output.app_overrides]
+"C:\\Windows\\System32\\notepad.exe" = 120.0
+"C:\\Program Files\\App\\modern.exe" = 1.0
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+
+        assert_eq!(cfg.output.app_overrides.len(), 2);
+        assert_eq!(
+            cfg.output
+                .app_overrides
+                .get("C:\\Windows\\System32\\notepad.exe")
+                .copied(),
+            Some(120.0)
+        );
+        assert_eq!(
+            cfg.output
+                .app_overrides
+                .get("C:\\Program Files\\App\\modern.exe")
+                .copied(),
+            Some(1.0)
+        );
+    }
+
+    #[test]
+    fn config_default_has_empty_overrides() {
+        assert!(OutputConfig::default().app_overrides.is_empty());
+    }
+
+    #[test]
+    fn config_sanitizes_override_values() {
+        let mut cfg = Config::default();
+        cfg.output
+            .app_overrides
+            .insert("high.exe".to_string(), 500.0);
+        cfg.output
+            .app_overrides
+            .insert("low.exe".to_string(), -10.0);
+
+        cfg.sanitize();
+
+        assert_eq!(
+            cfg.output.app_overrides.get("high.exe").copied(),
+            Some(120.0)
+        );
+        assert_eq!(cfg.output.app_overrides.get("low.exe").copied(), Some(1.0));
+    }
+
+    #[test]
+    fn threshold_setting_parses_auto() {
+        let text = r#"
+[output]
+inject_threshold = "auto"
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Auto);
+        assert!(cfg.output.inject_threshold.is_auto());
+        assert!((cfg.output.inject_threshold.fallback_threshold() - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn threshold_setting_parses_number() {
+        let text = r#"
+[output]
+inject_threshold = 40
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Fixed(40.0));
+        assert!(!cfg.output.inject_threshold.is_auto());
+        assert!((cfg.output.inject_threshold.fallback_threshold() - 40.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn threshold_setting_default_is_auto() {
+        let cfg = Config::default();
+        assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Auto);
+    }
+
+    #[test]
+    fn threshold_setting_round_trips_auto() {
+        let cfg = Config::default();
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        let parsed: Config = toml::from_str(&text).unwrap();
+        assert_eq!(parsed.output.inject_threshold, ThresholdSetting::Auto);
     }
 
     // -- Keyboard config tests ----------------------------------------------

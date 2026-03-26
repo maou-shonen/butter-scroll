@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::threshold::{AppKey, ThresholdMode};
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -23,7 +24,12 @@ pub trait ScrollOutput: Send + Sync {
 
 pub enum EngineCommand {
     /// New scroll event from the mouse hook.
-    Scroll { delta: i16, horizontal: bool },
+    Scroll {
+        delta: i16,
+        horizontal: bool,
+        target_pid: u32,
+        target_hwnd: isize,
+    },
     /// Pre-scaled scroll — bypasses `step_size / 120` normalization.
     /// The delta already represents the intended wheel output amount.
     /// Used for keyboard page/space scrolling where the distance should
@@ -33,8 +39,20 @@ pub enum EngineCommand {
     SetEnabled(bool),
     /// Hot-reload config.
     Reload(Box<Config>),
+    /// Async threshold detection result from detector thread.
+    DetectResult {
+        app_key: AppKey,
+        mode: ThresholdMode,
+    },
     /// Shut down the engine thread.
     Stop,
+}
+
+/// Request payload sent from engine to detector thread.
+pub struct DetectRequest {
+    pub hwnd: isize,
+    pub app_key: AppKey,
+    pub expected_delta: f64,
 }
 
 // ---------------------------------------------------------------------------

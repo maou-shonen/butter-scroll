@@ -1,11 +1,16 @@
 mod app;
 mod autostart;
 mod config;
+mod detector;
+mod detector_win;
 mod engine;
 mod hook;
 mod injector;
 mod keyboard_hook;
 mod pulse;
+mod resolve;
+mod resolve_win;
+mod threshold;
 mod traits;
 mod tray;
 mod util;
@@ -17,6 +22,8 @@ use crate::autostart::{AutoStartService, WindowsAutoStart};
 #[cfg(target_os = "windows")]
 use crate::config::{ConfigStore, FileConfigStore};
 #[cfg(target_os = "windows")]
+use crate::detector_win::WindowsScrollDetector;
+#[cfg(target_os = "windows")]
 use crate::engine::ScrollEngine;
 #[cfg(target_os = "windows")]
 use crate::hook::MouseHook;
@@ -24,6 +31,8 @@ use crate::hook::MouseHook;
 use crate::injector::WindowsScrollOutput;
 #[cfg(target_os = "windows")]
 use crate::keyboard_hook::KeyboardHook;
+#[cfg(target_os = "windows")]
+use crate::resolve_win::WindowsProcessResolver;
 #[cfg(target_os = "windows")]
 use crate::traits::{EngineCommand, SystemClock};
 #[cfg(target_os = "windows")]
@@ -61,9 +70,33 @@ fn run_windows() -> Result<(), String> {
 
     let output = Arc::new(WindowsScrollOutput::new());
     let clock = Arc::new(SystemClock::new());
+    let resolver = Arc::new(WindowsProcessResolver::new());
+    let detector = Box::new(WindowsScrollDetector::new());
 
-    let mut engine = ScrollEngine::new(clock, output, config.clone(), engine_rx);
-    let engine_thread = std::thread::spawn(move || engine.run());
+    // Load threshold cache from disk (alongside config file)
+    let cache_path = store.path().with_file_name("threshold_cache.json");
+    let threshold_cache = crate::threshold::AppThresholdCache::load(&cache_path);
+    let threshold_cache = std::sync::Arc::new(std::sync::Mutex::new(threshold_cache));
+
+    let mut engine = ScrollEngine::new(
+        clock,
+        output,
+        resolver,
+        detector,
+        config.clone(),
+        engine_tx.clone(),
+        engine_rx,
+    );
+    engine.set_threshold_cache(threshold_cache.clone());
+    let cache_path_for_thread = cache_path.clone();
+    let cache_for_save = threshold_cache.clone();
+    let engine_thread = std::thread::spawn(move || {
+        engine.run();
+        // Save cache on engine shutdown
+        if let Ok(cache) = cache_for_save.lock() {
+            let _ = cache.save(&cache_path_for_thread);
+        }
+    });
 
     // 3) Install low-level hooks
     let _mouse_hook = MouseHook::install(engine_tx.clone())?;

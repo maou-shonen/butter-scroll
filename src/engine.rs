@@ -1,8 +1,13 @@
 use crate::config::Config;
+use crate::detector::ScrollDetector;
 use crate::pulse::Pulse;
-use crate::traits::{EngineCommand, ScrollOutput, TimeSource};
-use crossbeam_channel::Receiver;
-use std::sync::Arc;
+use crate::resolve::ProcessResolver;
+use crate::threshold::{AppKey, AppThresholdCache, ThresholdMode};
+use crate::traits::{DetectRequest, EngineCommand, ScrollOutput, TimeSource};
+use crossbeam_channel::{unbounded, Receiver, Sender};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 // ---------------------------------------------------------------------------
@@ -25,7 +30,9 @@ pub struct ScrollEngine {
     // DI dependencies
     time: Arc<dyn TimeSource>,
     output: Arc<dyn ScrollOutput>,
+    resolver: Arc<dyn ProcessResolver>,
     rx: Receiver<EngineCommand>,
+    detect_tx: Sender<DetectRequest>,
 
     // Config (owned copy — updated via Reload command)
     config: Config,
@@ -35,6 +42,13 @@ pub struct ScrollEngine {
     queue: Vec<ScrollItem>,
     direction: (i8, i8),
     last_scroll_time: u64,
+    current_target_pid: u32,
+    current_target_hwnd: isize,
+    pid_to_key: HashMap<u32, AppKey>,
+    /// Per-app user overrides: AppKey → f64 threshold value.
+    /// Separated from ThresholdMode so we preserve the user's exact value.
+    app_override_cache: HashMap<AppKey, f64>,
+    threshold_cache: Arc<Mutex<AppThresholdCache>>,
 
     // Accumulator — collects animation output and injects once configured
     // threshold is reached.
@@ -46,22 +60,47 @@ impl ScrollEngine {
     pub fn new(
         time: Arc<dyn TimeSource>,
         output: Arc<dyn ScrollOutput>,
+        resolver: Arc<dyn ProcessResolver>,
+        detector: Box<dyn ScrollDetector>,
         config: Config,
+        tx: Sender<EngineCommand>,
         rx: Receiver<EngineCommand>,
     ) -> Self {
+        let (detect_tx, detect_rx) = unbounded::<DetectRequest>();
+        thread::spawn(move || {
+            while let Ok(req) = detect_rx.recv() {
+                let mode = detector.detect(req.hwnd, req.expected_delta);
+                let _ = tx.send(EngineCommand::DetectResult {
+                    app_key: req.app_key,
+                    mode,
+                });
+            }
+        });
+
         let pulse = Pulse::new(config.scroll.pulse_scale, config.scroll.pulse_normalize);
         Self {
             time,
             output,
+            resolver,
             rx,
+            detect_tx,
             config,
             pulse,
             queue: Vec::with_capacity(32),
             direction: (0, 0),
             last_scroll_time: 0,
+            current_target_pid: 0,
+            current_target_hwnd: 0,
+            pid_to_key: HashMap::new(),
+            app_override_cache: HashMap::new(),
+            threshold_cache: Arc::new(Mutex::new(AppThresholdCache::new())),
             pending_x: 0.0,
             pending_y: 0.0,
         }
+    }
+
+    pub fn set_threshold_cache(&mut self, cache: Arc<Mutex<AppThresholdCache>>) {
+        self.threshold_cache = cache;
     }
 
     // -- public (for tests) -------------------------------------------------
@@ -225,7 +264,7 @@ impl ScrollEngine {
     }
 
     pub(crate) fn flush_pending(&mut self) {
-        let threshold = self.config.output.inject_threshold;
+        let threshold = self.threshold_for_current_pid();
         const EPS: f64 = 1e-9;
 
         if self.pending_y.abs() + EPS >= threshold {
@@ -256,6 +295,34 @@ impl ScrollEngine {
     }
 
     // -- private helpers ----------------------------------------------------
+
+    fn threshold_for_current_pid(&self) -> f64 {
+        let fallback = self.config.output.inject_threshold.fallback_threshold();
+
+        if self.current_target_pid == 0 {
+            return fallback;
+        }
+
+        let Some(app_key) = self.pid_to_key.get(&self.current_target_pid) else {
+            return fallback;
+        };
+
+        // User override takes priority — use exact f64 value
+        if let Some(&val) = self.app_override_cache.get(app_key) {
+            return val;
+        }
+
+        // If auto-detect is off, skip cache lookup and use global fallback
+        if !self.config.output.inject_threshold.is_auto() {
+            return fallback;
+        }
+
+        if let Ok(cache) = self.threshold_cache.lock() {
+            cache.get_threshold(Some(app_key))
+        } else {
+            fallback
+        }
+    }
 
     /// If the scroll direction changed, clear the queue and reset
     /// acceleration (port of JS `directionCheck`).
@@ -347,7 +414,96 @@ impl ScrollEngine {
 
     fn handle_command(&mut self, cmd: EngineCommand) -> bool {
         match cmd {
-            EngineCommand::Scroll { delta, horizontal } => {
+            EngineCommand::Scroll {
+                delta,
+                horizontal,
+                target_pid,
+                target_hwnd,
+            } => {
+                self.current_target_pid = target_pid;
+                self.current_target_hwnd = target_hwnd;
+
+                // Resolve PID → AppKey. Re-resolve if PID was recycled
+                // (exe path changed for same PID).
+                if target_pid != 0 {
+                    let need_resolve = match self.pid_to_key.get(&target_pid) {
+                        None => true,
+                        Some(existing) => {
+                            // Check for PID reuse: resolve again and compare
+                            if let Some(fresh) = self.resolver.resolve_pid(target_pid) {
+                                if fresh.exe_path != existing.exe_path {
+                                    eprintln!(
+                                        "[threshold] PID {} recycled: {:?} → {:?}",
+                                        target_pid, existing.exe_path, fresh.exe_path
+                                    );
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        }
+                    };
+
+                    if need_resolve {
+                        if let Some(app_key) = self.resolver.resolve_pid(target_pid) {
+                            eprintln!(
+                                "[threshold] new app: {:?} (pid={}), status=Unknown",
+                                &app_key.exe_path, target_pid
+                            );
+                            // Check for user override — preserve exact f64 value
+                            let override_val = self
+                                .config
+                                .output
+                                .app_overrides
+                                .get(app_key.exe_path.to_str().unwrap_or(""))
+                                .copied();
+                            if let Some(val) = override_val {
+                                self.app_override_cache.insert(app_key.clone(), val);
+                                // Also mark in threshold cache so detection is skipped
+                                let mode = if val >= 100.0 {
+                                    ThresholdMode::Legacy120
+                                } else {
+                                    ThresholdMode::SmoothOk
+                                };
+                                if let Ok(mut cache) = self.threshold_cache.lock() {
+                                    cache.set_mode(app_key.clone(), mode);
+                                }
+                                eprintln!(
+                                    "[threshold] override: {:?} → threshold={:.0}",
+                                    &app_key.exe_path, val
+                                );
+                            }
+                            self.pid_to_key.insert(target_pid, app_key);
+                        }
+                    }
+                }
+
+                // Auto-detect: only when threshold is "auto" and no user override
+                if self.config.output.inject_threshold.is_auto() {
+                    if let Some(app_key) = self.pid_to_key.get(&target_pid).cloned() {
+                        if !self.app_override_cache.contains_key(&app_key) {
+                            let should_detect = {
+                                if let Ok(mut cache) = self.threshold_cache.lock() {
+                                    cache.start_detecting(app_key.clone())
+                                } else {
+                                    false
+                                }
+                            };
+
+                            if should_detect {
+                                eprintln!("[threshold] detecting: {:?}", &app_key.exe_path);
+                                let _ = self.detect_tx.send(DetectRequest {
+                                    hwnd: target_hwnd,
+                                    app_key,
+                                    expected_delta: self.config.scroll.step_size,
+                                });
+                            }
+                        }
+                    }
+                }
+
                 self.handle_scroll(delta, horizontal);
             }
             EngineCommand::ScrollRaw { delta_y } => {
@@ -366,6 +522,17 @@ impl ScrollEngine {
             EngineCommand::Reload(cfg) => {
                 self.apply_config(*cfg);
             }
+            EngineCommand::DetectResult { app_key, mode } => {
+                eprintln!(
+                    "[threshold] detected: {:?} → {:?} (threshold={:.0})",
+                    &app_key.exe_path,
+                    &mode,
+                    mode.threshold()
+                );
+                if let Ok(mut cache) = self.threshold_cache.lock() {
+                    cache.set_mode(app_key, mode);
+                }
+            }
             EngineCommand::Stop => return false,
         }
         true
@@ -379,16 +546,39 @@ impl ScrollEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ThresholdSetting;
+    use crate::detector::MockScrollDetector;
+    use crate::resolve::MockProcessResolver;
+    use crate::threshold::ThresholdMode;
     use crate::traits::{MockOutput, MockTime};
+    use std::path::PathBuf;
 
     /// Helper — build an engine with mock deps (no channel needed for
     /// direct method testing).
     fn test_engine() -> (ScrollEngine, Arc<MockTime>, Arc<MockOutput>) {
+        test_engine_with_resolver(None)
+    }
+
+    fn test_engine_with_resolver(
+        result: Option<AppKey>,
+    ) -> (ScrollEngine, Arc<MockTime>, Arc<MockOutput>) {
         let time = Arc::new(MockTime::new());
         let output = Arc::new(MockOutput::new());
+        let resolver = Arc::new(MockProcessResolver { result });
+        let detector = Box::new(MockScrollDetector {
+            result: ThresholdMode::SmoothOk,
+        });
         let config = Config::default();
-        let (_tx, rx) = crossbeam_channel::unbounded();
-        let engine = ScrollEngine::new(time.clone(), output.clone(), config, rx);
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let engine = ScrollEngine::new(
+            time.clone(),
+            output.clone(),
+            resolver,
+            detector,
+            config,
+            tx,
+            rx,
+        );
         (engine, time, output)
     }
 
@@ -624,7 +814,7 @@ mod tests {
     fn flush_injects_at_threshold() {
         let (mut engine, time, output) = test_engine();
         engine.config.scroll.step_size = 100.0;
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
         let anim_time = engine.config.scroll.animation_time as u64;
 
         // step_size=100 => total ≈ -100. threshold=40 should split into
@@ -665,7 +855,7 @@ mod tests {
     fn flush_threshold_120_produces_single_wheel_delta_injection() {
         let (mut engine, time, output) = test_engine();
         engine.config.scroll.step_size = 120.0;
-        engine.config.output.inject_threshold = 120.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(120.0);
         let anim_time = engine.config.scroll.animation_time as u64;
 
         time.set(0);
@@ -695,6 +885,7 @@ mod tests {
     #[test]
     fn flush_remainder_carries_over() {
         let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
 
         // Manually set pending below threshold — no injection.
         engine.pending_y = -30.0;
@@ -766,7 +957,7 @@ mod tests {
     #[test]
     fn flush_handles_float_epsilon() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 40.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
 
         // Simulate float rounding around threshold: should still flush.
         engine.pending_y = -39.9999999997;
@@ -786,7 +977,7 @@ mod tests {
     #[test]
     fn flush_remainder_carries_across_frames_with_threshold_120() {
         let (mut engine, _time, output) = test_engine();
-        engine.config.output.inject_threshold = 120.0;
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(120.0);
 
         engine.pending_y = -100.0;
         engine.flush_pending();
@@ -798,5 +989,297 @@ mod tests {
         let events = output.drain();
         assert_eq!(events, vec![(0, -130)]);
         assert_eq!(engine.pending_y, 0.0);
+    }
+
+    #[test]
+    fn flush_uses_per_app_threshold_legacy() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = ThresholdSetting::Auto;
+
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/legacy/app.exe"),
+            exe_mtime: None,
+        };
+        let cache = Arc::new(Mutex::new(AppThresholdCache::new()));
+        cache
+            .lock()
+            .unwrap()
+            .set_mode(app_key.clone(), ThresholdMode::Legacy120);
+        engine.set_threshold_cache(cache);
+        engine.pid_to_key.insert(1234, app_key);
+        engine.current_target_pid = 1234;
+
+        engine.pending_y = -100.0;
+        engine.flush_pending();
+        assert!(
+            output.drain().is_empty(),
+            "legacy threshold=120 should not flush at 100"
+        );
+
+        engine.pending_y = -120.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -120)]);
+    }
+
+    #[test]
+    fn flush_uses_per_app_threshold_smooth() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = ThresholdSetting::Auto;
+
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/smooth/app.exe"),
+            exe_mtime: None,
+        };
+        let cache = Arc::new(Mutex::new(AppThresholdCache::new()));
+        cache
+            .lock()
+            .unwrap()
+            .set_mode(app_key.clone(), ThresholdMode::SmoothOk);
+        engine.set_threshold_cache(cache);
+        engine.pid_to_key.insert(5678, app_key);
+        engine.current_target_pid = 5678;
+
+        engine.pending_y = -1.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -1)]);
+    }
+
+    #[test]
+    fn flush_falls_back_to_global() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
+        engine.current_target_pid = 7777;
+
+        engine.pending_y = -39.0;
+        engine.flush_pending();
+        assert!(
+            output.drain().is_empty(),
+            "should honor global threshold without pid mapping"
+        );
+
+        engine.pending_y = -40.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -40)]);
+    }
+
+    #[test]
+    fn fixed_threshold_ignores_cache() {
+        let (mut engine, _time, output) = test_engine();
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
+
+        // Even though cache says SmoothOk (threshold=1), Fixed(40) should win
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/app/test.exe"),
+            exe_mtime: None,
+        };
+        let cache = Arc::new(Mutex::new(AppThresholdCache::new()));
+        cache
+            .lock()
+            .unwrap()
+            .set_mode(app_key.clone(), ThresholdMode::SmoothOk);
+        engine.set_threshold_cache(cache);
+        engine.pid_to_key.insert(42, app_key);
+        engine.current_target_pid = 42;
+
+        engine.pending_y = -5.0;
+        engine.flush_pending();
+        assert!(
+            output.drain().is_empty(),
+            "Fixed(40) should not flush at -5, ignoring cache SmoothOk"
+        );
+
+        engine.pending_y = -40.0;
+        engine.flush_pending();
+        assert_eq!(output.drain(), vec![(0, -40)]);
+    }
+
+    // -- PID resolution tests -----------------------------------------------
+
+    #[test]
+    fn pid_resolution_populates_key_map() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/test.exe"),
+            exe_mtime: Some(12345),
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        assert!(engine.pid_to_key.is_empty());
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 42,
+            target_hwnd: 0,
+        });
+
+        assert_eq!(engine.pid_to_key.get(&42), Some(&app_key));
+        assert_eq!(engine.current_target_pid, 42);
+    }
+
+    #[test]
+    fn failed_resolution_uses_global_default() {
+        // MockResolver returns None — simulates OpenProcess failure
+        let (mut engine, time, output) = test_engine_with_resolver(None);
+        engine.config.output.inject_threshold = ThresholdSetting::Fixed(40.0);
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 999,
+            target_hwnd: 0,
+        });
+
+        // No entry in pid_to_key
+        assert!(!engine.pid_to_key.contains_key(&999));
+        // Engine should still function — uses global threshold
+        assert_eq!(engine.current_target_pid, 999);
+        // Scroll was processed (queue has items or output was produced)
+        assert!(!engine.queue.is_empty() || !output.drain().is_empty());
+    }
+
+    #[test]
+    fn pid_resolution_applies_user_override_legacy() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/legacy/notepad.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        // Configure user override for this exe path
+        engine
+            .config
+            .output
+            .app_overrides
+            .insert("C:/legacy/notepad.exe".to_string(), 120.0);
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 100,
+            target_hwnd: 0,
+        });
+
+        // Should have resolved and applied override
+        assert_eq!(engine.pid_to_key.get(&100), Some(&app_key));
+        let cache = engine.threshold_cache.lock().unwrap();
+        assert_eq!(
+            cache.get_mode(&app_key),
+            Some(&ThresholdMode::Legacy120),
+            "user override >= 100 should set Legacy120"
+        );
+    }
+
+    #[test]
+    fn pid_resolution_applies_user_override_smooth() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/modern/app.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        engine
+            .config
+            .output
+            .app_overrides
+            .insert("C:/modern/app.exe".to_string(), 1.0);
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 200,
+            target_hwnd: 0,
+        });
+
+        assert_eq!(engine.pid_to_key.get(&200), Some(&app_key));
+        let cache = engine.threshold_cache.lock().unwrap();
+        assert_eq!(
+            cache.get_mode(&app_key),
+            Some(&ThresholdMode::SmoothOk),
+            "user override < 100 should set SmoothOk"
+        );
+    }
+
+    #[test]
+    fn pid_resolution_skips_already_resolved() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/cached.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        // Pre-populate pid_to_key
+        engine.pid_to_key.insert(50, app_key.clone());
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 50,
+            target_hwnd: 0,
+        });
+
+        // Should still have the same entry (resolver not called again)
+        assert_eq!(engine.pid_to_key.get(&50), Some(&app_key));
+    }
+
+    #[test]
+    fn detection_triggers_for_unknown_app() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/detect.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 314,
+            target_hwnd: 0,
+        });
+
+        std::thread::sleep(Duration::from_millis(10));
+        assert!(engine.drain_commands());
+
+        let cache = engine.threshold_cache.lock().unwrap();
+        assert_eq!(cache.get_mode(&app_key), Some(&ThresholdMode::SmoothOk));
+    }
+
+    #[test]
+    fn no_duplicate_detection_for_detecting_app() {
+        let app_key = AppKey {
+            exe_path: PathBuf::from("C:/apps/detect-once.exe"),
+            exe_mtime: None,
+        };
+        let (mut engine, time, _output) = test_engine_with_resolver(Some(app_key.clone()));
+
+        time.set(0);
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 2718,
+            target_hwnd: 0,
+        });
+
+        {
+            let cache = engine.threshold_cache.lock().unwrap();
+            assert_eq!(cache.get_mode(&app_key), Some(&ThresholdMode::Detecting));
+        }
+
+        engine.handle_command(EngineCommand::Scroll {
+            delta: -120,
+            horizontal: false,
+            target_pid: 2718,
+            target_hwnd: 0,
+        });
+
+        {
+            let cache = engine.threshold_cache.lock().unwrap();
+            assert_eq!(cache.get_mode(&app_key), Some(&ThresholdMode::Detecting));
+        }
     }
 }
