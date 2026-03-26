@@ -27,9 +27,12 @@ jobs:
       - uses: maou-shonen/node-cache-action@v1
 
       - uses: jdx/mise-action@v2
+        env:
+          MISE_DISABLE_TOOLS: rust
 
-      - name: Ensure Rust components
-        run: rustup component add rustfmt clippy
+      - uses: dtolnay/rust-toolchain@1.94.0
+        with:
+          components: rustfmt, clippy
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -61,6 +64,10 @@ jobs:
       - uses: maou-shonen/node-cache-action@v1
 
       - uses: jdx/mise-action@v2
+        env:
+          MISE_DISABLE_TOOLS: rust
+
+      - uses: dtolnay/rust-toolchain@1.94.0
 
       - uses: swatinem/rust-cache@v2
         with:
