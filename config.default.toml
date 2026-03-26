@@ -73,6 +73,13 @@ max = 3.0
 # Range: 1–120
 inject_threshold = 1.0
 
+# Automatically detect per-app scroll behavior on first scroll.
+# When enabled, apps that over-scroll with small deltas (e.g. WPF)
+# are auto-switched to threshold=120. Results are cached to disk.
+# Set to false to disable auto-detection and rely only on
+# inject_threshold + app_overrides.
+auto_detect = true
+
 # Optional per-app overrides for legacy or modern apps.
 # If one app needs a different threshold, override it here.
 # Keys are executable paths; values use the same 1–120 range.

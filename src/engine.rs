@@ -473,22 +473,27 @@ impl ScrollEngine {
                     }
                 }
 
-                if let Some(app_key) = self.pid_to_key.get(&target_pid).cloned() {
-                    let should_detect = {
-                        if let Ok(mut cache) = self.threshold_cache.lock() {
-                            cache.start_detecting(app_key.clone())
-                        } else {
-                            false
-                        }
-                    };
+                // Auto-detect: only when enabled and no user override
+                if self.config.output.auto_detect {
+                    if let Some(app_key) = self.pid_to_key.get(&target_pid).cloned() {
+                        if !self.app_override_cache.contains_key(&app_key) {
+                            let should_detect = {
+                                if let Ok(mut cache) = self.threshold_cache.lock() {
+                                    cache.start_detecting(app_key.clone())
+                                } else {
+                                    false
+                                }
+                            };
 
-                    if should_detect {
-                        eprintln!("[threshold] detecting: {:?}", &app_key.exe_path);
-                        let _ = self.detect_tx.send(DetectRequest {
-                            hwnd: target_hwnd,
-                            app_key,
-                            expected_delta: self.config.scroll.step_size,
-                        });
+                            if should_detect {
+                                eprintln!("[threshold] detecting: {:?}", &app_key.exe_path);
+                                let _ = self.detect_tx.send(DetectRequest {
+                                    hwnd: target_hwnd,
+                                    app_key,
+                                    expected_delta: self.config.scroll.step_size,
+                                });
+                            }
+                        }
                     }
                 }
 

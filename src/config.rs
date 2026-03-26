@@ -58,9 +58,19 @@ pub struct OutputConfig {
     /// 40 = WHEEL_DELTA/3 (good balance)
     /// 1 = per-frame (default; smoothest, modern apps only)
     pub inject_threshold: f64,
+    /// Automatically detect per-app scroll behavior on first scroll.
+    /// When enabled, apps that over-scroll with small deltas (e.g. WPF)
+    /// are auto-switched to threshold=120.
+    /// When disabled, only inject_threshold and app_overrides are used.
+    #[serde(default = "default_true")]
+    pub auto_detect: bool,
     /// Per-app threshold overrides keyed by executable path.
     #[serde(default)]
     pub app_overrides: HashMap<String, f64>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// General application settings.
@@ -230,6 +240,7 @@ impl Default for OutputConfig {
     fn default() -> Self {
         Self {
             inject_threshold: 1.0,
+            auto_detect: true,
             app_overrides: HashMap::new(),
         }
     }
@@ -372,6 +383,7 @@ step_size = 2.5
             },
             output: OutputConfig {
                 inject_threshold: f64::NEG_INFINITY,
+                auto_detect: true,
                 app_overrides: HashMap::new(),
             },
             general: GeneralConfig::default(),
