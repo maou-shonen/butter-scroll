@@ -16,6 +16,9 @@ pub struct Config {
     pub output: OutputConfig,
     pub general: GeneralConfig,
     pub keyboard: KeyboardConfig,
+    /// App filter (blacklist/whitelist). `None` = not yet configured —
+    /// the frontend shows a first-run setup screen.
+    pub app_filter: Option<AppFilterConfig>,
 }
 
 /// Scroll animation parameters.
@@ -147,6 +150,46 @@ pub struct GeneralConfig {
 // Keyboard smooth scrolling
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// App filter (blacklist / whitelist)
+// ---------------------------------------------------------------------------
+
+/// Application filter mode.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AppFilterMode {
+    /// Smooth all apps EXCEPT those in the list.
+    Blacklist,
+    /// ONLY smooth apps in the list.
+    Whitelist,
+}
+
+/// Application filter configuration.
+///
+/// When present, controls which apps receive smooth scrolling based on
+/// the selected mode (blacklist or whitelist) and the app list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppFilterConfig {
+    pub mode: AppFilterMode,
+    /// List of executable paths to include/exclude.
+    #[serde(default)]
+    pub list: Vec<String>,
+}
+
+impl Default for AppFilterConfig {
+    fn default() -> Self {
+        Self {
+            mode: AppFilterMode::Blacklist,
+            list: Vec::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard smooth scrolling
+// ---------------------------------------------------------------------------
+
 /// Per-key-group activation mode.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -267,6 +310,13 @@ impl Config {
                 *value = 1.0;
             }
             *value = value.clamp(1.0, 120.0);
+        }
+
+        // App filter: remove empty entries and deduplicate.
+        if let Some(ref mut af) = self.app_filter {
+            af.list.retain(|p| !p.trim().is_empty());
+            af.list.sort();
+            af.list.dedup();
         }
 
         // Keyboard config: nothing numeric to clamp, but ensure mode
@@ -445,6 +495,7 @@ step_size = 2.5
             },
             general: GeneralConfig::default(),
             keyboard: KeyboardConfig::default(),
+            app_filter: None,
         };
 
         cfg.sanitize();

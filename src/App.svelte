@@ -1,13 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import type { Config } from "./lib/types";
+  import type { Config, AppFilterMode } from "./lib/types";
   import { getConfig, getDefaultConfig, saveConfig } from "./lib/api";
   import ScrollSettings from "./lib/ScrollSettings.svelte";
   import AccelerationSettings from "./lib/AccelerationSettings.svelte";
   import OutputSettings from "./lib/OutputSettings.svelte";
   import KeyboardSettings from "./lib/KeyboardSettings.svelte";
   import GeneralSettings from "./lib/GeneralSettings.svelte";
+  import AppFilterSetup from "./lib/AppFilterSetup.svelte";
+  import AppFilterSettings from "./lib/AppFilterSettings.svelte";
 
   // 標籤定義
   const tabs = [
@@ -16,6 +18,7 @@
     { id: "output", label: "輸出" },
     { id: "keyboard", label: "鍵盤" },
     { id: "general", label: "一般" },
+    { id: "app_filter", label: "名單" },
   ] as const;
 
   // State
@@ -75,6 +78,13 @@
     }
   }
 
+  // 處理應用程式過濾模式的初次設定
+  async function handleFilterSetup(event: CustomEvent<{ mode: AppFilterMode }>) {
+    if (!config) return;
+    config.app_filter = { mode: event.detail.mode, list: [] };
+    await handleSave();
+  }
+
   // 重設當前標籤的設定為預設值
   async function resetCurrentTab() {
     if (!config) return;
@@ -96,6 +106,12 @@
         case "general":
           config.general = defaults.general;
           break;
+        case "app_filter":
+          // 保留當前模式，只清空清單
+          if (config.app_filter) {
+            config.app_filter = { mode: config.app_filter.mode, list: [] };
+          }
+          break;
       }
       // 觸發響應式更新
       config = config;
@@ -106,27 +122,29 @@
 </script>
 
 <main>
-  <header>
-    <h1>butter-scroll 設定</h1>
-    <nav class="tab-bar">
-      {#each tabs as tab}
-        <button
-          type="button"
-          class="tab"
-          class:active={activeTab === tab.id}
-          on:click={() => (activeTab = tab.id)}
-        >
-          {tab.label}
-        </button>
-      {/each}
-    </nav>
-  </header>
-
   {#if error}
     <div class="error">{error}</div>
   {:else if config === null}
     <div class="loading">載入中...</div>
+  {:else if config.app_filter === null}
+    <AppFilterSetup on:confirm={handleFilterSetup} />
   {:else}
+    <header>
+      <h1>butter-scroll 設定</h1>
+      <nav class="tab-bar">
+        {#each tabs as tab}
+          <button
+            type="button"
+            class="tab"
+            class:active={activeTab === tab.id}
+            on:click={() => (activeTab = tab.id)}
+          >
+            {tab.label}
+          </button>
+        {/each}
+      </nav>
+    </header>
+
     <div class="content">
       <div class="tab-content">
         {#if activeTab === "scroll"}
@@ -139,6 +157,8 @@
           <KeyboardSettings bind:config={config.keyboard} />
         {:else if activeTab === "general"}
           <GeneralSettings bind:config={config.general} />
+        {:else if activeTab === "app_filter"}
+          <AppFilterSettings bind:config={config.app_filter} />
         {/if}
       </div>
       <div class="reset-row">
@@ -151,28 +171,28 @@
         </button>
       </div>
     </div>
-  {/if}
 
-  <footer>
-    <div class="save-row">
-      {#if saveStatus}
-        <span
-          class="save-status"
-          class:save-error={saveStatus.includes("失敗")}
+    <footer>
+      <div class="save-row">
+        {#if saveStatus}
+          <span
+            class="save-status"
+            class:save-error={saveStatus.includes("失敗")}
+          >
+            {saveStatus}
+          </span>
+        {/if}
+        <button
+          type="button"
+          class="save-btn"
+          disabled={isSaving || config === null}
+          on:click={handleSave}
         >
-          {saveStatus}
-        </span>
-      {/if}
-      <button
-        type="button"
-        class="save-btn"
-        disabled={isSaving || config === null}
-        on:click={handleSave}
-      >
-        {isSaving ? "儲存中..." : "儲存設定"}
-      </button>
-    </div>
-  </footer>
+          {isSaving ? "儲存中..." : "儲存設定"}
+        </button>
+      </div>
+    </footer>
+  {/if}
 </main>
 
 <style>

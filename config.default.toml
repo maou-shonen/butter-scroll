@@ -79,6 +79,29 @@ inject_threshold = "auto"
 # "C:\\Windows\\System32\\notepad.exe" = 120.0
 # "C:\\Program Files\\App\\modern.exe" = 1.0
 
+# [app_filter]
+#
+# Controls which apps receive smooth scrolling.
+# Must be configured on first launch (the settings UI prompts for this).
+#
+# mode: "blacklist" or "whitelist"
+#   "blacklist" — smooth all apps EXCEPT those in the list
+#   "whitelist" — ONLY smooth apps in the list
+#
+# list: array of executable paths
+#
+# Examples:
+#   [app_filter]
+#   mode = "blacklist"
+#   list = ["C:\\Program Files\\SomeApp\\app.exe"]
+#
+#   [app_filter]
+#   mode = "whitelist"
+#   list = [
+#     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+#     "C:\\Windows\\explorer.exe",
+#   ]
+
 [general]
 
 # Start butter-scroll automatically on Windows login.

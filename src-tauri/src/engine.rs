@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{AppFilterMode, Config};
 use crate::detector::ScrollDetector;
 use crate::pulse::Pulse;
 use crate::resolve::ProcessResolver;
@@ -288,6 +288,29 @@ impl ScrollEngine {
 
     // -- private helpers ----------------------------------------------------
 
+    /// Check if the given PID should bypass smooth scrolling based on the
+    /// configured app filter (blacklist/whitelist).
+    fn should_bypass_smoothing(&self, target_pid: u32) -> bool {
+        let Some(ref af) = self.config.app_filter else {
+            return false; // no filter configured — smooth everything
+        };
+
+        let Some(app_key) = self.pid_to_key.get(&target_pid) else {
+            // PID not resolved yet — can't check list.
+            // Whitelist: unknown app → bypass (deny by default).
+            // Blacklist: unknown app → allow.
+            return af.mode == AppFilterMode::Whitelist;
+        };
+
+        let exe_path = app_key.exe_path.to_str().unwrap_or("");
+        let in_list = af.list.iter().any(|p| p.eq_ignore_ascii_case(exe_path));
+
+        match af.mode {
+            AppFilterMode::Blacklist => in_list,  // in blacklist → bypass
+            AppFilterMode::Whitelist => !in_list, // not in whitelist → bypass
+        }
+    }
+
     fn threshold_for_current_pid(&self) -> f64 {
         let fallback = self.config.output.inject_threshold.fallback_threshold();
 
@@ -474,6 +497,17 @@ impl ScrollEngine {
                             self.pid_to_key.insert(target_pid, app_key);
                         }
                     }
+                }
+
+                // App filter: blacklist/whitelist check
+                if self.should_bypass_smoothing(target_pid) {
+                    let (dx, dy) = if horizontal {
+                        (delta as i32, 0)
+                    } else {
+                        (0, delta as i32)
+                    };
+                    self.output.inject_wheel(dx, dy);
+                    return true;
                 }
 
                 // Auto-detect: only when threshold is "auto" and no user override

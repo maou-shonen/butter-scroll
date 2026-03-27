@@ -41,12 +41,20 @@ export interface GeneralConfig {
   enabled: boolean;
 }
 
+export type AppFilterMode = "blacklist" | "whitelist";
+
+export interface AppFilterConfig {
+  mode: AppFilterMode;
+  list: string[]; // executable paths
+}
+
 export interface Config {
   scroll: ScrollConfig;
   acceleration: AccelerationConfig;
   output: OutputConfig;
   general: GeneralConfig;
   keyboard: KeyboardConfig;
+  app_filter: AppFilterConfig | null;
 }
 
 export interface AppStatus {
