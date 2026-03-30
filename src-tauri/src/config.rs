@@ -16,6 +16,8 @@ pub struct Config {
     pub output: OutputConfig,
     pub general: GeneralConfig,
     pub keyboard: KeyboardConfig,
+    #[serde(default)]
+    pub hotkey: HotkeyConfig,
     /// App filter (blacklist/whitelist). `None` = not yet configured —
     /// the frontend shows a first-run setup screen.
     pub app_filter: Option<AppFilterConfig>,
@@ -186,6 +188,25 @@ impl Default for AppFilterConfig {
     }
 }
 
+/// Hotkey configuration for toggling the app.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HotkeyConfig {
+    /// Master switch for the hotkey.
+    pub enabled: bool,
+    /// Key combo string in preset form.
+    pub combo: String,
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            combo: "ctrl+shift+b".to_string(),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Keyboard smooth scrolling
 // ---------------------------------------------------------------------------
@@ -268,6 +289,13 @@ impl Config {
     /// This avoids pathological values from hand-edited TOML, such as
     /// `pulse_scale <= 0` or non-finite floats.
     pub fn sanitize(&mut self) {
+        const HOTKEY_PRESETS: [&str; 4] = [
+            "ctrl+shift+b",
+            "ctrl+alt+b",
+            "ctrl+shift+alt+b",
+            "ctrl+shift+h",
+        ];
+
         // Keep frame pacing reasonable.
         self.scroll.frame_rate = self.scroll.frame_rate.clamp(30, 1000);
 
@@ -317,6 +345,10 @@ impl Config {
             af.list.retain(|p| !p.trim().is_empty());
             af.list.sort();
             af.list.dedup();
+        }
+
+        if !HOTKEY_PRESETS.contains(&self.hotkey.combo.as_str()) {
+            self.hotkey.combo = HotkeyConfig::default().combo;
         }
 
         // Keyboard config: nothing numeric to clamp, but ensure mode
@@ -450,6 +482,8 @@ mod tests {
         assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Auto);
         assert!(cfg.general.enabled);
         assert!(!cfg.general.autostart);
+        assert!(cfg.hotkey.enabled);
+        assert_eq!(cfg.hotkey.combo, "ctrl+shift+b");
     }
 
     #[test]
@@ -459,6 +493,19 @@ mod tests {
         let parsed: Config = toml::from_str(&text).unwrap();
         assert_eq!(parsed.scroll.frame_rate, cfg.scroll.frame_rate);
         assert!((parsed.scroll.step_size - cfg.scroll.step_size).abs() < f64::EPSILON);
+        assert_eq!(parsed.hotkey.enabled, cfg.hotkey.enabled);
+        assert_eq!(parsed.hotkey.combo, cfg.hotkey.combo);
+    }
+
+    #[test]
+    fn hotkey_round_trip_toml() {
+        let cfg = HotkeyConfig {
+            enabled: false,
+            combo: "ctrl+alt+b".to_string(),
+        };
+        let text = toml::to_string_pretty(&cfg).unwrap();
+        let parsed: HotkeyConfig = toml::from_str(&text).unwrap();
+        assert_eq!(parsed, cfg);
     }
 
     #[test]
@@ -472,6 +519,8 @@ step_size = 2.5
         // Other fields should be defaults
         assert_eq!(cfg.scroll.frame_rate, 150);
         assert_eq!(cfg.scroll.animation_time, 400);
+        assert!(cfg.hotkey.enabled);
+        assert_eq!(cfg.hotkey.combo, "ctrl+shift+b");
     }
 
     #[test]
@@ -495,6 +544,10 @@ step_size = 2.5
             },
             general: GeneralConfig::default(),
             keyboard: KeyboardConfig::default(),
+            hotkey: HotkeyConfig {
+                enabled: true,
+                combo: "invalid".to_string(),
+            },
             app_filter: None,
         };
 
@@ -509,6 +562,7 @@ step_size = 2.5
         assert_eq!(cfg.acceleration.max, 1.0);
         // NEG_INFINITY sanitizes to Fixed(1.0)
         assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Fixed(1.0));
+        assert_eq!(cfg.hotkey.combo, "ctrl+shift+b");
     }
 
     #[test]
@@ -519,6 +573,7 @@ step_size = 2.5
         cfg.scroll.pulse_scale = 0.01;
         cfg.scroll.pulse_normalize = 100.0;
         cfg.output.inject_threshold = ThresholdSetting::Fixed(500.0);
+        cfg.hotkey.combo = "ctrl+shift+h".to_string();
 
         cfg.sanitize();
 
@@ -526,6 +581,28 @@ step_size = 2.5
         assert_eq!(cfg.scroll.pulse_scale, 0.1);
         assert_eq!(cfg.scroll.pulse_normalize, 10.0);
         assert_eq!(cfg.output.inject_threshold, ThresholdSetting::Fixed(120.0));
+        assert_eq!(cfg.hotkey.combo, "ctrl+shift+h");
+    }
+
+    #[test]
+    fn sanitize_rejects_invalid_hotkey_combo() {
+        let mut cfg = Config::default();
+        cfg.hotkey.combo = "invalid".to_string();
+
+        cfg.sanitize();
+
+        assert_eq!(cfg.hotkey.combo, "ctrl+shift+b");
+    }
+
+    #[test]
+    fn config_deserializes_hotkey_defaults() {
+        let text = r#"
+[scroll]
+step_size = 2.5
+"#;
+        let cfg: Config = toml::from_str(text).unwrap();
+        assert!(cfg.hotkey.enabled);
+        assert_eq!(cfg.hotkey.combo, "ctrl+shift+b");
     }
 
     #[test]
