@@ -273,8 +273,12 @@ pub fn run() {
             })
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    if window.label() == "main" {
+                        // Hide the main settings window instead of closing it
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                    // Other windows (e.g. confirm-app-filter) close normally
                 }
             })
             .run(tauri::generate_context!())
