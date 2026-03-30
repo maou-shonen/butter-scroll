@@ -6,9 +6,9 @@ use tauri::{
 
 use tauri_plugin_autostart::ManagerExt;
 
-use crate::commands::toggle_app_filter_entry_in_config;
+use crate::commands::show_confirm_dialog;
 use crate::config::{Config, ConfigStore};
-use crate::foreground::{capture_filtered, ForegroundApp, WindowsForegroundCapture};
+use crate::foreground::{capture_foreground_app, ForegroundApp};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
@@ -132,45 +132,38 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     sync_keyboard_hook(&config);
                 }
                 "toggle_current_app" => {
-                    let capture = WindowsForegroundCapture::new();
-                    let Some(app_info) = capture_filtered(&capture) else {
+                    let Some(app_info) = capture_foreground_app() else {
                         log::warn!("[tray] could not identify foreground app");
                         return;
                     };
 
-                    let mut config = state.config_store.load();
-                    let in_list = config
-                        .app_filter
-                        .as_ref()
-                        .map(|filter| {
-                            filter
-                                .list
-                                .iter()
-                                .any(|item| item.eq_ignore_ascii_case(&app_info.exe_path))
-                        })
-                        .unwrap_or(false);
+                    let config = state.config_store.load();
+                    let Some(app_filter) = config.app_filter.as_ref() else {
+                        log::warn!("[tray] app filter not configured");
+                        return;
+                    };
+
+                    let in_list = app_filter
+                        .list
+                        .iter()
+                        .any(|item| item.eq_ignore_ascii_case(&app_info.exe_path));
+
+                    let mode = match app_filter.mode {
+                        crate::config::AppFilterMode::Blacklist => "blacklist",
+                        crate::config::AppFilterMode::Whitelist => "whitelist",
+                    }
+                    .to_string();
 
                     let ForegroundApp { exe_path, app_name } = app_info;
 
-                    match toggle_app_filter_entry_in_config(&mut config, exe_path) {
-                        Ok(result) => {
-                            if let Err(e) = state.config_store.save(&config) {
-                                log::error!("[tray] failed to save config: {e}");
-                                return;
-                            }
-                            if let Err(e) = state
-                                .engine_tx
-                                .send(EngineCommand::Reload(Box::new(config.clone())))
-                            {
-                                log::error!("[tray] failed to send engine command: {e}");
-                            }
-                            log::info!("[tray] {} {} from filter list", result.action, app_name);
-                            log::debug!("[tray] current app was in list: {in_list}");
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) =
+                            show_confirm_dialog(app_handle, exe_path, app_name, in_list, mode).await
+                        {
+                            log::warn!("[tray] failed to show confirmation dialog: {e}");
                         }
-                        Err(e) => {
-                            log::warn!("[tray] failed to toggle current app: {e}");
-                        }
-                    }
+                    });
                 }
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {

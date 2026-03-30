@@ -46,6 +46,18 @@ pub fn capture_filtered<C: ForegroundCapture>(capture: &C) -> Option<ForegroundA
     })
 }
 
+/// Convenience wrapper: creates the platform capture and applies the self-detection filter.
+#[cfg(target_os = "windows")]
+pub fn capture_foreground_app() -> Option<ForegroundApp> {
+    let capture = WindowsForegroundCapture::new();
+    capture_filtered(&capture)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn capture_foreground_app() -> Option<ForegroundApp> {
+    None
+}
+
 #[cfg(target_os = "windows")]
 mod platform {
     use super::*;
