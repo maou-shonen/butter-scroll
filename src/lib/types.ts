@@ -68,3 +68,10 @@ export interface AppStatus {
   keyboard_enabled: boolean;
   autostart_enabled: boolean;
 }
+
+export interface ToggleResult {
+  action: "added" | "removed";
+  exe_path: string;
+  mode: string;
+  list_count: number;
+}

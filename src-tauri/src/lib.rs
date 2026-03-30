@@ -212,6 +212,7 @@ pub fn run() {
                 commands::get_default_config,
                 commands::save_config,
                 commands::toggle_enabled,
+                commands::toggle_app_filter_entry,
                 commands::toggle_keyboard,
                 commands::toggle_autostart,
                 commands::get_status,

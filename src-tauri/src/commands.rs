@@ -5,7 +5,16 @@ use crate::config::{Config, ConfigStore};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ToggleResult {
+    pub action: String,
+    pub exe_path: String,
+    pub mode: String,
+    pub list_count: usize,
+}
+
 /// Sync keyboard hook state — pauses it when global smooth scrolling is disabled.
+#[cfg(target_os = "windows")]
 fn sync_keyboard_hook(config: &Config) {
     if config.general.enabled {
         crate::keyboard_hook::KeyboardHook::update_config(&config.keyboard);
@@ -15,6 +24,10 @@ fn sync_keyboard_hook(config: &Config) {
         crate::keyboard_hook::KeyboardHook::update_config(&paused);
     }
 }
+
+/// No-op sync on non-Windows targets so tests and diagnostics can run.
+#[cfg(not(target_os = "windows"))]
+fn sync_keyboard_hook(_config: &Config) {}
 
 #[derive(Serialize, Deserialize)]
 pub struct AppStatus {
@@ -67,6 +80,71 @@ pub fn toggle_enabled(state: State<AppState>) -> Result<bool, String> {
         .map_err(|e| e.to_string())?;
     sync_keyboard_hook(&config);
     Ok(new_state)
+}
+
+fn toggle_app_filter_entry_in_config(
+    config: &mut Config,
+    exe_path: String,
+) -> Result<ToggleResult, String> {
+    let (mode, action) = {
+        let app_filter = config.app_filter.as_mut().ok_or_else(|| {
+            "App filter not configured. Please choose blacklist/whitelist mode in Settings first."
+                .to_string()
+        })?;
+
+        let mode = match app_filter.mode {
+            crate::config::AppFilterMode::Blacklist => "blacklist",
+            crate::config::AppFilterMode::Whitelist => "whitelist",
+        }
+        .to_string();
+
+        let action = if app_filter
+            .list
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(&exe_path))
+        {
+            app_filter
+                .list
+                .retain(|item| !item.eq_ignore_ascii_case(&exe_path));
+            "removed"
+        } else {
+            app_filter.list.push(exe_path.clone());
+            "added"
+        }
+        .to_string();
+
+        (mode, action)
+    };
+
+    config.sanitize();
+    let list_count = config
+        .app_filter
+        .as_ref()
+        .map(|app_filter| app_filter.list.len())
+        .unwrap_or(0);
+
+    Ok(ToggleResult {
+        action,
+        exe_path,
+        mode,
+        list_count,
+    })
+}
+
+/// Toggles an app filter entry. Returns the resulting action and list state.
+#[tauri::command]
+pub fn toggle_app_filter_entry(
+    exe_path: String,
+    state: State<AppState>,
+) -> Result<ToggleResult, String> {
+    let mut config = state.config_store.load();
+    let result = toggle_app_filter_entry_in_config(&mut config, exe_path)?;
+    state.config_store.save(&config)?;
+    state
+        .engine_tx
+        .send(EngineCommand::Reload(Box::new(config.clone())))
+        .map_err(|e| e.to_string())?;
+    Ok(result)
 }
 
 /// Toggles keyboard smooth scrolling. Returns new enabled state.
@@ -143,4 +221,81 @@ pub async fn check_for_updates(app: AppHandle, state: State<'_, AppState>) -> Re
         .map_err(|e| e.to_string())?;
 
     Ok(update.is_some())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AppFilterConfig, AppFilterMode};
+
+    fn config_with_filter(mode: AppFilterMode, list: Vec<&str>) -> Config {
+        let mut config = Config::default();
+        config.app_filter = Some(AppFilterConfig {
+            mode,
+            list: list.into_iter().map(String::from).collect(),
+        });
+        config
+    }
+
+    #[test]
+    fn toggle_adds_new_entry() {
+        let mut config = config_with_filter(AppFilterMode::Blacklist, vec![]);
+
+        let result =
+            toggle_app_filter_entry_in_config(&mut config, "C:\\Windows\\calc.exe".to_string())
+                .expect("toggle should succeed");
+
+        assert_eq!(result.action, "added");
+        assert_eq!(result.exe_path, "C:\\Windows\\calc.exe");
+        assert_eq!(result.mode, "blacklist");
+        assert_eq!(result.list_count, 1);
+        assert_eq!(
+            config.app_filter.unwrap().list,
+            vec!["C:\\Windows\\calc.exe"]
+        );
+    }
+
+    #[test]
+    fn toggle_removes_existing_entry() {
+        let mut config =
+            config_with_filter(AppFilterMode::Whitelist, vec!["C:\\Windows\\calc.exe"]);
+
+        let result =
+            toggle_app_filter_entry_in_config(&mut config, "C:\\Windows\\calc.exe".to_string())
+                .expect("toggle should succeed");
+
+        assert_eq!(result.action, "removed");
+        assert_eq!(result.exe_path, "C:\\Windows\\calc.exe");
+        assert_eq!(result.mode, "whitelist");
+        assert_eq!(result.list_count, 0);
+        assert!(config.app_filter.unwrap().list.is_empty());
+    }
+
+    #[test]
+    fn toggle_matches_case_insensitively() {
+        let mut config =
+            config_with_filter(AppFilterMode::Blacklist, vec!["c:\\windows\\notepad.exe"]);
+
+        let result =
+            toggle_app_filter_entry_in_config(&mut config, "C:\\Windows\\NOTEPAD.EXE".to_string())
+                .expect("toggle should succeed");
+
+        assert_eq!(result.action, "removed");
+        assert_eq!(result.list_count, 0);
+        assert!(config.app_filter.unwrap().list.is_empty());
+    }
+
+    #[test]
+    fn toggle_errors_when_unconfigured() {
+        let mut config = Config::default();
+
+        let err =
+            toggle_app_filter_entry_in_config(&mut config, "C:\\Windows\\calc.exe".to_string())
+                .expect_err("toggle should fail");
+
+        assert_eq!(
+            err,
+            "App filter not configured. Please choose blacklist/whitelist mode in Settings first."
+        );
+    }
 }

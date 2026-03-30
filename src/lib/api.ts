@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Config, AppStatus } from "./types";
+import type { Config, AppStatus, ToggleResult } from "./types";
 
 /** Returns the current configuration from the Rust backend. */
 export async function getConfig(): Promise<Config> {
@@ -19,6 +19,11 @@ export async function saveConfig(config: Config): Promise<void> {
 /** Toggles scroll smoothing. Returns new enabled state. */
 export async function toggleEnabled(): Promise<boolean> {
   return await invoke<boolean>("toggle_enabled");
+}
+
+/** Toggles an app filter entry. Returns the resulting action and list state. */
+export async function toggleAppFilterEntry(exePath: string): Promise<ToggleResult> {
+  return await invoke<ToggleResult>("toggle_app_filter_entry", { exePath });
 }
 
 /** Toggles keyboard smoothing. Returns new enabled state. */
