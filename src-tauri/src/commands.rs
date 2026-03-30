@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewUrl};
 
-use crate::config::{Config, ConfigStore};
+use crate::config::{Config, ConfigStore, HotkeyConfig};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
@@ -29,6 +29,121 @@ fn sync_keyboard_hook(config: &Config) {
 #[cfg(not(target_os = "windows"))]
 fn sync_keyboard_hook(_config: &Config) {}
 
+#[cfg(target_os = "windows")]
+pub(crate) fn build_hotkey_manager(
+    app: &AppHandle,
+    state: &AppState,
+    combo: &str,
+) -> Result<crate::hotkey::HotkeyManager, String> {
+    let app_handle = app.clone();
+    let config_store = std::sync::Arc::clone(&state.config_store);
+    let capture = crate::foreground::WindowsForegroundCapture::new();
+
+    crate::hotkey::HotkeyManager::new(combo, move || {
+        let foreground = match crate::foreground::capture_filtered(&capture) {
+            Some(app) => app,
+            None => {
+                log::warn!("[hotkey] could not identify foreground app");
+                return;
+            }
+        };
+
+        let config = config_store.load();
+        let app_filter = match config.app_filter {
+            Some(app_filter) => app_filter,
+            None => {
+                log::warn!("[hotkey] app filter not configured");
+                return;
+            }
+        };
+
+        let in_list = app_filter
+            .list
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(&foreground.exe_path));
+        let mode = match app_filter.mode {
+            crate::config::AppFilterMode::Blacklist => "blacklist",
+            crate::config::AppFilterMode::Whitelist => "whitelist",
+        }
+        .to_string();
+
+        let app_handle = app_handle.clone();
+        let exe_path = foreground.exe_path;
+        let app_name = foreground.app_name;
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) =
+                show_confirm_dialog(app_handle, exe_path, app_name, in_list, mode).await
+            {
+                log::warn!("[hotkey] failed to show confirmation dialog: {error}");
+            }
+        });
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn sync_hotkey_manager(
+    app: &AppHandle,
+    state: &AppState,
+    previous_hotkey: &HotkeyConfig,
+    next_hotkey: &HotkeyConfig,
+) {
+    let mut hotkey_slot = match state.hotkey_manager.lock() {
+        Ok(slot) => slot,
+        Err(error) => {
+            log::warn!("[hotkey] failed to lock hotkey manager state: {error}");
+            return;
+        }
+    };
+
+    if !next_hotkey.enabled {
+        *hotkey_slot = None;
+        return;
+    }
+
+    if !previous_hotkey.enabled {
+        match build_hotkey_manager(app, state, &next_hotkey.combo) {
+            Ok(manager) => *hotkey_slot = Some(manager),
+            Err(error) => log::warn!(
+                "[hotkey] failed to enable hotkey '{}': {error}",
+                next_hotkey.combo
+            ),
+        }
+        return;
+    }
+
+    match hotkey_slot.as_mut() {
+        Some(manager) => {
+            if previous_hotkey.combo != next_hotkey.combo {
+                if let Err(error) = manager.update_combo(&next_hotkey.combo) {
+                    log::warn!(
+                        "[hotkey] failed to update hotkey combo '{}' -> '{}': {error}",
+                        previous_hotkey.combo,
+                        next_hotkey.combo
+                    );
+                }
+            }
+        }
+        None => match build_hotkey_manager(app, state, &next_hotkey.combo) {
+            Ok(manager) => *hotkey_slot = Some(manager),
+            Err(error) => {
+                log::warn!(
+                    "[hotkey] hotkey enabled but manager missing; failed to recreate '{}': {error}",
+                    next_hotkey.combo
+                );
+            }
+        },
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn sync_hotkey_manager(
+    _app: &AppHandle,
+    _state: &AppState,
+    _previous_hotkey: &HotkeyConfig,
+    _next_hotkey: &HotkeyConfig,
+) {
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AppStatus {
     pub enabled: bool,
@@ -50,7 +165,9 @@ pub fn get_default_config() -> Config {
 
 /// Saves configuration and hot-reloads engine.
 #[tauri::command]
-pub fn save_config(config: Config, state: State<AppState>) -> Result<(), String> {
+pub fn save_config(config: Config, state: State<AppState>, app: AppHandle) -> Result<(), String> {
+    let previous_config = state.config_store.load();
+
     let mut config = config;
     config.sanitize();
     state.config_store.save(&config)?;
@@ -63,6 +180,8 @@ pub fn save_config(config: Config, state: State<AppState>) -> Result<(), String>
 
     // Hot-reload keyboard hook — respects global enabled state
     sync_keyboard_hook(&config);
+
+    sync_hotkey_manager(&app, &state, &previous_config.hotkey, &config.hotkey);
 
     Ok(())
 }

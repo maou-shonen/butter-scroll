@@ -189,6 +189,7 @@ pub fn run() {
             engine_tx: engine_tx.clone(),
             config_store: Arc::clone(&config_store) as Arc<dyn ConfigStore>,
             threshold_cache: Arc::clone(&threshold_cache),
+            hotkey_manager: Mutex::new(None),
             portable,
         };
 
@@ -228,6 +229,28 @@ pub fn run() {
             .setup(move |app| {
                 cleanup_old_autostart();
                 tray::setup_tray(app.handle())?;
+
+                if config.hotkey.enabled {
+                    let state = app.state::<state::AppState>();
+                    match commands::build_hotkey_manager(app.handle(), &state, &config.hotkey.combo)
+                    {
+                        Ok(manager) => {
+                            if let Ok(mut slot) = state.hotkey_manager.lock() {
+                                *slot = Some(manager);
+                            } else {
+                                log::warn!(
+                                    "[hotkey] failed to lock app hotkey state during startup"
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            log::warn!(
+                                "[hotkey] failed to initialize startup hotkey '{}': {error}",
+                                config.hotkey.combo
+                            );
+                        }
+                    }
+                }
 
                 // Delayed startup update check (installed mode only).
                 // The NSIS-based updater is not compatible with portable installs.
