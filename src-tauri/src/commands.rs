@@ -82,7 +82,7 @@ pub fn toggle_enabled(state: State<AppState>) -> Result<bool, String> {
     Ok(new_state)
 }
 
-fn toggle_app_filter_entry_in_config(
+pub(crate) fn toggle_app_filter_entry_in_config(
     config: &mut Config,
     exe_path: String,
 ) -> Result<ToggleResult, String> {

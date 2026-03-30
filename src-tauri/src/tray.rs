@@ -6,7 +6,9 @@ use tauri::{
 
 use tauri_plugin_autostart::ManagerExt;
 
+use crate::commands::toggle_app_filter_entry_in_config;
 use crate::config::{Config, ConfigStore};
+use crate::foreground::{capture_filtered, ForegroundApp, WindowsForegroundCapture};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
@@ -26,6 +28,8 @@ fn sync_keyboard_hook(config: &Config) {
 /// Menu layout:
 /// - 啟用平滑捲動 (checkbox)
 /// - 鍵盤平滑捲動 (checkbox)
+/// - ─────────────
+/// - 切換當前應用程式
 /// - ─────────────
 /// - 開啟設定
 /// - ─────────────
@@ -55,6 +59,14 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
+    let toggle_current_app_item = MenuItem::with_id(
+        app,
+        "toggle_current_app",
+        "切換當前應用程式",
+        true,
+        None::<&str>,
+    )?;
+
     let settings_item = MenuItem::with_id(app, "settings", "開啟設定", true, None::<&str>)?;
 
     let autostart_item = CheckMenuItem::with_id(
@@ -70,6 +82,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let menu = MenuBuilder::new(app)
         .items(&[&enabled_item, &keyboard_item])
+        .separator()
+        .item(&toggle_current_app_item)
         .separator()
         .item(&settings_item)
         .separator()
@@ -116,6 +130,47 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                         log::error!("[tray] failed to send engine command: {e}");
                     }
                     sync_keyboard_hook(&config);
+                }
+                "toggle_current_app" => {
+                    let capture = WindowsForegroundCapture::new();
+                    let Some(app_info) = capture_filtered(&capture) else {
+                        log::warn!("[tray] could not identify foreground app");
+                        return;
+                    };
+
+                    let mut config = state.config_store.load();
+                    let in_list = config
+                        .app_filter
+                        .as_ref()
+                        .map(|filter| {
+                            filter
+                                .list
+                                .iter()
+                                .any(|item| item.eq_ignore_ascii_case(&app_info.exe_path))
+                        })
+                        .unwrap_or(false);
+
+                    let ForegroundApp { exe_path, app_name } = app_info;
+
+                    match toggle_app_filter_entry_in_config(&mut config, exe_path) {
+                        Ok(result) => {
+                            if let Err(e) = state.config_store.save(&config) {
+                                log::error!("[tray] failed to save config: {e}");
+                                return;
+                            }
+                            if let Err(e) = state
+                                .engine_tx
+                                .send(EngineCommand::Reload(Box::new(config.clone())))
+                            {
+                                log::error!("[tray] failed to send engine command: {e}");
+                            }
+                            log::info!("[tray] {} {} from filter list", result.action, app_name);
+                            log::debug!("[tray] current app was in list: {in_list}");
+                        }
+                        Err(e) => {
+                            log::warn!("[tray] failed to toggle current app: {e}");
+                        }
+                    }
                 }
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
