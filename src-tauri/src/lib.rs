@@ -4,6 +4,7 @@ mod app;
 mod config;
 mod detector;
 mod engine;
+pub mod foreground;
 mod injector;
 mod pulse;
 mod state;
