@@ -612,6 +612,119 @@ mod tests {
         (engine, time, output)
     }
 
+    fn set_app_filter(engine: &mut ScrollEngine, mode: AppFilterMode, list: Vec<&str>) {
+        engine.config.app_filter = Some(crate::config::AppFilterConfig {
+            mode,
+            list: list.into_iter().map(String::from).collect(),
+        });
+    }
+
+    fn insert_app_key(engine: &mut ScrollEngine, pid: u32, exe_path: &str) {
+        engine.pid_to_key.insert(
+            pid,
+            AppKey {
+                exe_path: PathBuf::from(exe_path),
+                exe_mtime: None,
+            },
+        );
+    }
+
+    #[test]
+    fn app_filter_none_returns_false() {
+        let (engine, _time, _output) = test_engine();
+
+        assert!(!engine.should_bypass_smoothing(1234));
+    }
+
+    #[test]
+    fn blacklist_match_returns_true() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Blacklist,
+            vec!["C:\\Windows\\notepad.exe"],
+        );
+        insert_app_key(&mut engine, 1001, "C:\\Windows\\notepad.exe");
+
+        assert!(engine.should_bypass_smoothing(1001));
+    }
+
+    #[test]
+    fn blacklist_miss_returns_false() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Blacklist,
+            vec!["C:\\Windows\\notepad.exe"],
+        );
+        insert_app_key(&mut engine, 1002, "C:\\Windows\\calc.exe");
+
+        assert!(!engine.should_bypass_smoothing(1002));
+    }
+
+    #[test]
+    fn whitelist_match_returns_false() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Whitelist,
+            vec!["C:\\Windows\\notepad.exe"],
+        );
+        insert_app_key(&mut engine, 1003, "C:\\Windows\\notepad.exe");
+
+        assert!(!engine.should_bypass_smoothing(1003));
+    }
+
+    #[test]
+    fn whitelist_miss_returns_true() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Whitelist,
+            vec!["C:\\Windows\\notepad.exe"],
+        );
+        insert_app_key(&mut engine, 1004, "C:\\Windows\\calc.exe");
+
+        assert!(engine.should_bypass_smoothing(1004));
+    }
+
+    #[test]
+    fn unknown_pid_blacklist_returns_false() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Blacklist,
+            vec!["C:\\Windows\\notepad.exe"],
+        );
+
+        assert!(!engine.should_bypass_smoothing(9001));
+    }
+
+    #[test]
+    fn unknown_pid_whitelist_returns_true() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Whitelist,
+            vec!["C:\\Windows\\notepad.exe"],
+        );
+
+        assert!(engine.should_bypass_smoothing(9002));
+    }
+
+    #[test]
+    fn app_filter_matches_case_insensitively() {
+        let (mut engine, _time, _output) = test_engine();
+        set_app_filter(
+            &mut engine,
+            AppFilterMode::Blacklist,
+            vec!["c:\\windows\\notepad.exe"],
+        );
+        insert_app_key(&mut engine, 1005, "C:\\Windows\\NOTEPAD.exe");
+
+        assert!(engine.should_bypass_smoothing(1005));
+    }
+
     #[test]
     fn single_scroll_total_delta() {
         let (mut engine, time, _output) = test_engine();
