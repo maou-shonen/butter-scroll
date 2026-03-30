@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State, WebviewUrl};
 
 use crate::config::{Config, ConfigStore};
 use crate::state::AppState;
@@ -221,6 +221,47 @@ pub async fn check_for_updates(app: AppHandle, state: State<'_, AppState>) -> Re
         .map_err(|e| e.to_string())?;
 
     Ok(update.is_some())
+}
+
+/// Shows the confirmation dialog for toggling an app filter entry.
+/// Creates the window if it doesn't exist, or closes and recreates it with new params.
+#[tauri::command]
+pub async fn show_confirm_dialog(
+    app: AppHandle,
+    exe_path: String,
+    app_name: String,
+    in_list: bool,
+    mode: String,
+) -> Result<(), String> {
+    use tauri::WebviewWindowBuilder;
+
+    let label = "confirm-app-filter";
+    let url = format!(
+        "confirm-app-filter.html?exe_path={}&app_name={}&in_list={}&mode={}",
+        urlencoding::encode(&exe_path),
+        urlencoding::encode(&app_name),
+        in_list,
+        mode
+    );
+
+    // Close existing window if present (simplest approach for fresh params)
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.close();
+    }
+
+    // Create new window with fresh params
+    let _window = WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
+        .title("確認")
+        .inner_size(400.0, 220.0)
+        .resizable(false)
+        .center()
+        .always_on_top(true)
+        .visible(true)
+        .skip_taskbar(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[cfg(test)]

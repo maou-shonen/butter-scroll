@@ -222,6 +222,7 @@ pub fn run() {
                 commands::toggle_autostart,
                 commands::get_status,
                 commands::check_for_updates,
+                commands::show_confirm_dialog,
             ])
             .manage(app_state)
             .setup(move |app| {
