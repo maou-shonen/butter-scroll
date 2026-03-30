@@ -18,6 +18,11 @@ mod detector_win;
 #[cfg(target_os = "windows")]
 mod hook;
 #[cfg(target_os = "windows")]
+pub mod hotkey;
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "hotkey.rs"]
+mod hotkey_test_module;
+#[cfg(target_os = "windows")]
 mod keyboard_hook;
 #[cfg(target_os = "windows")]
 mod resolve_win;
