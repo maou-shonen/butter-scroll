@@ -149,3 +149,16 @@ mode = "off"
 # Space scrolls down in browsers; Shift+Space scrolls up.
 # In editors and other apps, Space is character input.
 mode = "off"
+
+[hotkey]
+
+# Global toggle hotkey for the app.
+#
+# enabled: master switch for the hotkey.
+# combo: preset combo string. Valid presets:
+#   "ctrl+shift+b"
+#   "ctrl+alt+b"
+#   "ctrl+shift+alt+b"
+#   "ctrl+shift+h"
+enabled = true
+combo = "ctrl+shift+b"

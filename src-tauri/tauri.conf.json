@@ -20,6 +20,18 @@
         "center": true,
         "visible": false,
         "skipTaskbar": true
+      },
+      {
+        "label": "confirm-app-filter",
+        "title": "確認",
+        "url": "confirm-app-filter.html",
+        "width": 400,
+        "height": 220,
+        "resizable": false,
+        "center": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true
       }
     ]
   },

@@ -4,6 +4,7 @@ mod app;
 mod config;
 mod detector;
 mod engine;
+pub mod foreground;
 mod injector;
 mod pulse;
 mod state;
@@ -16,6 +17,11 @@ mod commands;
 mod detector_win;
 #[cfg(target_os = "windows")]
 mod hook;
+#[cfg(target_os = "windows")]
+pub mod hotkey;
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "hotkey.rs"]
+mod hotkey_test_module;
 #[cfg(target_os = "windows")]
 mod keyboard_hook;
 #[cfg(target_os = "windows")]
@@ -183,6 +189,7 @@ pub fn run() {
             engine_tx: engine_tx.clone(),
             config_store: Arc::clone(&config_store) as Arc<dyn ConfigStore>,
             threshold_cache: Arc::clone(&threshold_cache),
+            hotkey_manager: Mutex::new(None),
             portable,
         };
 
@@ -211,15 +218,39 @@ pub fn run() {
                 commands::get_default_config,
                 commands::save_config,
                 commands::toggle_enabled,
+                commands::toggle_app_filter_entry,
                 commands::toggle_keyboard,
                 commands::toggle_autostart,
                 commands::get_status,
                 commands::check_for_updates,
+                commands::show_confirm_dialog,
             ])
             .manage(app_state)
             .setup(move |app| {
                 cleanup_old_autostart();
                 tray::setup_tray(app.handle())?;
+
+                if config.hotkey.enabled {
+                    let state = app.state::<state::AppState>();
+                    match commands::build_hotkey_manager(app.handle(), &state, &config.hotkey.combo)
+                    {
+                        Ok(manager) => {
+                            if let Ok(mut slot) = state.hotkey_manager.lock() {
+                                *slot = Some(manager);
+                            } else {
+                                log::warn!(
+                                    "[hotkey] failed to lock app hotkey state during startup"
+                                );
+                            }
+                        }
+                        Err(error) => {
+                            log::warn!(
+                                "[hotkey] failed to initialize startup hotkey '{}': {error}",
+                                config.hotkey.combo
+                            );
+                        }
+                    }
+                }
 
                 // Delayed startup update check (installed mode only).
                 // The NSIS-based updater is not compatible with portable installs.

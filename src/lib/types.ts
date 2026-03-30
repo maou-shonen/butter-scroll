@@ -36,6 +36,11 @@ export interface KeyboardConfig {
   space: KeyboardGroupConfig;
 }
 
+export interface HotkeyConfig {
+  enabled: boolean;
+  combo: string;
+}
+
 export interface GeneralConfig {
   autostart: boolean;
   enabled: boolean;
@@ -54,6 +59,7 @@ export interface Config {
   output: OutputConfig;
   general: GeneralConfig;
   keyboard: KeyboardConfig;
+  hotkey: HotkeyConfig;
   app_filter: AppFilterConfig | null;
 }
 
@@ -61,4 +67,11 @@ export interface AppStatus {
   enabled: boolean;
   keyboard_enabled: boolean;
   autostart_enabled: boolean;
+}
+
+export interface ToggleResult {
+  action: "added" | "removed";
+  exe_path: string;
+  mode: string;
+  list_count: number;
 }

@@ -8,6 +8,7 @@
   import OutputSettings from "./lib/OutputSettings.svelte";
   import KeyboardSettings from "./lib/KeyboardSettings.svelte";
   import GeneralSettings from "./lib/GeneralSettings.svelte";
+  import HotkeySettings from "./lib/HotkeySettings.svelte";
   import AppFilterSetup from "./lib/AppFilterSetup.svelte";
   import AppFilterSettings from "./lib/AppFilterSettings.svelte";
 
@@ -17,6 +18,7 @@
     { id: "acceleration", label: "加速" },
     { id: "output", label: "輸出" },
     { id: "keyboard", label: "鍵盤" },
+    { id: "hotkey", label: "快速鍵" },
     { id: "general", label: "一般" },
     { id: "app_filter", label: "名單" },
   ] as const;
@@ -103,6 +105,9 @@
         case "keyboard":
           config.keyboard = defaults.keyboard;
           break;
+        case "hotkey":
+          config.hotkey = defaults.hotkey;
+          break;
         case "general":
           config.general = defaults.general;
           break;
@@ -155,6 +160,8 @@
           <OutputSettings bind:config={config.output} />
         {:else if activeTab === "keyboard"}
           <KeyboardSettings bind:config={config.keyboard} />
+        {:else if activeTab === "hotkey"}
+          <HotkeySettings bind:config={config.hotkey} />
         {:else if activeTab === "general"}
           <GeneralSettings bind:config={config.general} />
         {:else if activeTab === "app_filter"}

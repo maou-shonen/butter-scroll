@@ -6,7 +6,9 @@ use tauri::{
 
 use tauri_plugin_autostart::ManagerExt;
 
+use crate::commands::show_confirm_dialog;
 use crate::config::{Config, ConfigStore};
+use crate::foreground::{capture_foreground_app, ForegroundApp};
 use crate::state::AppState;
 use crate::traits::EngineCommand;
 
@@ -26,6 +28,8 @@ fn sync_keyboard_hook(config: &Config) {
 /// Menu layout:
 /// - 啟用平滑捲動 (checkbox)
 /// - 鍵盤平滑捲動 (checkbox)
+/// - ─────────────
+/// - 切換當前應用程式
 /// - ─────────────
 /// - 開啟設定
 /// - ─────────────
@@ -55,6 +59,14 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         None::<&str>,
     )?;
 
+    let toggle_current_app_item = MenuItem::with_id(
+        app,
+        "toggle_current_app",
+        "切換當前應用程式",
+        true,
+        None::<&str>,
+    )?;
+
     let settings_item = MenuItem::with_id(app, "settings", "開啟設定", true, None::<&str>)?;
 
     let autostart_item = CheckMenuItem::with_id(
@@ -70,6 +82,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let menu = MenuBuilder::new(app)
         .items(&[&enabled_item, &keyboard_item])
+        .separator()
+        .item(&toggle_current_app_item)
         .separator()
         .item(&settings_item)
         .separator()
@@ -116,6 +130,40 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                         log::error!("[tray] failed to send engine command: {e}");
                     }
                     sync_keyboard_hook(&config);
+                }
+                "toggle_current_app" => {
+                    let Some(app_info) = capture_foreground_app() else {
+                        log::warn!("[tray] could not identify foreground app");
+                        return;
+                    };
+
+                    let config = state.config_store.load();
+                    let Some(app_filter) = config.app_filter.as_ref() else {
+                        log::warn!("[tray] app filter not configured");
+                        return;
+                    };
+
+                    let in_list = app_filter
+                        .list
+                        .iter()
+                        .any(|item| item.eq_ignore_ascii_case(&app_info.exe_path));
+
+                    let mode = match app_filter.mode {
+                        crate::config::AppFilterMode::Blacklist => "blacklist",
+                        crate::config::AppFilterMode::Whitelist => "whitelist",
+                    }
+                    .to_string();
+
+                    let ForegroundApp { exe_path, app_name } = app_info;
+
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        if let Err(e) =
+                            show_confirm_dialog(app_handle, exe_path, app_name, in_list, mode).await
+                        {
+                            log::warn!("[tray] failed to show confirmation dialog: {e}");
+                        }
+                    });
                 }
                 "settings" => {
                     if let Some(window) = app.get_webview_window("main") {
